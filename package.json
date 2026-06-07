@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "A quiet cross-platform Redis desktop client.",
+  "author": "la3rence",
   "main": "out/main/index.js",
   "type": "module",
   "scripts": {
@@ -23,6 +24,7 @@
       "package.json"
     ],
     "mac": {
+      "icon": "build/icon.icns",
       "category": "public.app-category.developer-tools",
       "target": [
         "dmg",
