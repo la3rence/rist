@@ -12,7 +12,7 @@
     "postinstall": "npx install-electron",
     "typecheck": "tsc --noEmit",
     "build": "electron-vite build",
-    "pack:mac": "uv run --managed-python --no-project electron-builder --mac --publish=never -c.electronDist=node_modules/electron/dist",
+    "pack:mac": "uv run --managed-python --no-project electron-builder --mac --publish=never",
     "dist:mac": "pnpm build && pnpm pack:mac",
     "dist:win": "pnpm build && electron-builder --win --publish=never",
     "preview": "electron-vite preview"
