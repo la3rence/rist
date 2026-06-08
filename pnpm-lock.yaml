@@ -161,8 +161,8 @@ packages:
     peerDependencies:
       electron: '>=13.0.0'
 
-  '@electron/asar@3.2.7':
-    resolution: {integrity: sha512-8FaSCAIiZGYFWyjeevPQt+0e9xCK9YmJ2Rjg5SXgdsXon6cRnU0Yxnbe6CvJbQn26baifur2Y2G5EBayRIsjyg==}
+  '@electron/asar@3.4.1':
+    resolution: {integrity: sha512-i4/rNPRS84t0vSRa2HorerGRXWyF4vThfHesw0dmcWHp+cspK743UanA0suA5Q5y8kzY2y6YKrvbIUn69BCAiA==}
     engines: {node: '>=10.12.0'}
     hasBin: true
 
@@ -704,8 +704,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@sindresorhus/is@3.1.1':
-    resolution: {integrity: sha512-tLnujxFtfH7F+i5ghUfgGlJsvyCKvUnSMFMlWybFdX9/DdX8svb4Zwx1gV0gkkVCHXtmPSetoAR3QlKfOld6Tw==}
+  '@sindresorhus/is@4.0.0':
+    resolution: {integrity: sha512-FyD2meJpDPjyNQejSjvnhpgI/azsQkA4lGbuu5BQZfjvJ9cbRZXzeWL2HceCekW4lixO9JPesIIQkSoLjeJHNQ==}
     engines: {node: '>=10'}
 
   '@szmarczak/http-timer@4.0.6':
@@ -967,8 +967,8 @@ packages:
     resolution: {integrity: sha512-2/kNscPhpcxrOigMZzbiWF7dz8ilhb/nIHU3EyZiXWXpeq/au8qJ8VhdftMkty3n7Gj6HIGalQG8oiBNB3AJgA==}
     engines: {node: '>=10.6.0'}
 
-  cacheable-request@7.0.1:
-    resolution: {integrity: sha512-lt0mJ6YAnsrBErpTMWeu5kl/tg9xMAWjavYTN6VQXM1A/teBITuNcccXsCxF0tDQQJf9DfAaX5O4e0zp0KlfZw==}
+  cacheable-request@7.0.2:
+    resolution: {integrity: sha512-pouW8/FmiPQbuGpkXQ9BAPv/Mo5xDGANgSNXzTzJ8DrKGuXOssM4wIQRjfanNRh3Yu5cfYPvcorqbhg2KIJtew==}
     engines: {node: '>=8'}
 
   call-bind-apply-helpers@1.0.2:
@@ -1351,8 +1351,8 @@ packages:
     resolution: {integrity: sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg==}
     engines: {node: '>= 0.4'}
 
-  got@11.7.0:
-    resolution: {integrity: sha512-7en2XwH2MEqOsrK0xaKhbWibBoZqy+f1RSUoIeF1BLcnf+pyQdDsljWMfmOh+QKJwuvDIiKx38GtPh5wFdGGjg==}
+  got@11.8.5:
+    resolution: {integrity: sha512-o0Je4NvQObAuZPHLFoRSkdG2lTgtcynqymzg2Vupdx6PorhaT5MCbIyXG6d4D94kk8ZG57QeosgdiqfJWhEhlQ==}
     engines: {node: '>=10.19.0'}
 
   graceful-fs@4.2.11:
@@ -1711,9 +1711,9 @@ packages:
     resolution: {integrity: sha512-6eZs5Ls3WtCisHWp9S2GUy8dqkpGi4BVSz3GaqiE6ezub0512ESztXUwUB6C6IKbQkY2Pnb/mD4WYojCRwcwLA==}
     engines: {node: '>=0.10.0'}
 
-  normalize-url@4.1.0:
-    resolution: {integrity: sha512-X781mkWeK6PDMAZJfGn/wnwil4dV6pIdF9euiNqtA89uJvZuNDJO2YyJxiwpPhTQcF5pYUU1v+kcOxzYV6rZlA==}
-    engines: {node: '>=8'}
+  normalize-url@6.0.1:
+    resolution: {integrity: sha512-VU4pzAuh7Kip71XEmO9aNREYAdMHFGTVj/i+CaTImS8x0i1d3jUZkXhqluy/PRgjPLMgsLQulYY3PJ/aSbSjpQ==}
+    engines: {node: '>=10'}
 
   npmlog@6.0.2:
     resolution: {integrity: sha512-/vBvz5Jfr9dT/aFWd0FIRf+T/Q2WBsLENygUaFUqstqsycmZAP/t5BvFJTK0viFmSUxiUKTUplWy5vt+rvKIxg==}
@@ -1880,9 +1880,6 @@ packages:
   safe-buffer@5.1.2:
     resolution: {integrity: sha512-Gd2UZBJDkXlY7GbJxfsE8/nvKkUEU1G38c1siN6QP6a9PT9MmHB8GnpscSmMJSoF8LOIrt8ud/wPtojys4G6+g==}
 
-  safe-buffer@5.2.1:
-    resolution: {integrity: sha512-rp3So07KcdmmKbGvgaNxQSJr7bGVSVk5S9Eq1F+ppbRo70+YeaDxkw5Dd8NPN+GD6bjnYm2VuPuCXmpuYvmCXQ==}
-
   safer-buffer@2.1.2:
     resolution: {integrity: sha512-YZo3K82SD7Riyi0E1EQPojLz7kpepnSQI9IyPbHHg1XXXevb5dJI7tpyN2ADxGcQbHG7vcyRHk0cbwqcQriUtg==}
 
@@ -1969,10 +1966,6 @@ packages:
     resolution: {integrity: sha512-jH9EhtKIjuXZ2cWxmXS8ZP80XyC3iasQxMDV8jzhNJpfDb7VbQLVW4Wvsxz9QZvzV+G4YoSfBUVKDOyxLzi/sg==}
     engines: {node: '>= 6'}
 
-  string-width@4.2.0:
-    resolution: {integrity: sha512-zUz5JD+tgqtuDjMhwIg5uFVV3dtqZ9yQJlZVfq4I01/K5Paj5UHj7VyrQOJvzawSVlKpObApbfD0Ed6yJc+1eg==}
-    engines: {node: '>=8'}
-
   string-width@4.2.3:
     resolution: {integrity: sha512-wKyQRQpjJ0sIp62ErSZdGsjMJWsap5oRNihHhu6G7JVO/9jIB6UyevL+tXuOqrng8j/cxKTWyWUwvSTriiZz/g==}
     engines: {node: '>=8'}
@@ -1983,13 +1976,6 @@ packages:
 
   string_decoder@1.1.1:
     resolution: {integrity: sha512-n/ShnvDi6FHbbVfviro+WojiFzv+s8MPMHBczVePfUpDJLwoLT0ht1l4YwBCbi8pJAveEEdnkHyPyTP/mzRfwg==}
-
-  string_decoder@1.3.0:
-    resolution: {integrity: sha512-hkRX8U1WjJFd8LsDJ2yQ/wWWxaopEsABU1XfkM8A+j0+85JAGppt16cr1Whg6KIbb4okU6Mql6BOj+uup/wKeA==}
-
-  strip-ansi@6.0.0:
-    resolution: {integrity: sha512-AuvKTrTfQNYNIctbR1K/YGTR1756GycPsg7b9bdV9Duqur4gv6aKqHXah67Z8ImS7WEz5QVcOtlfW2rZEugt6w==}
-    engines: {node: '>=8'}
 
   strip-ansi@6.0.1:
     resolution: {integrity: sha512-Y38VPSHcqkFrCpFnQ9vuSXmquuv5oXOKpGeT6aGrr3o3Gc9AlVa6JBfUSOCnbxGGZF+/0ooI7KrPuUSztUdU5A==}
@@ -2315,7 +2301,7 @@ snapshots:
     dependencies:
       electron: 42.3.3
 
-  '@electron/asar@3.2.7':
+  '@electron/asar@3.4.1':
     dependencies:
       commander: 5.0.0
       glob: 7.2.0
@@ -2360,7 +2346,7 @@ snapshots:
       debug: 4.4.3
       detect-libc: 2.1.2
       fs-extra: 10.1.0
-      got: 11.7.0
+      got: 11.8.5
       node-abi: 3.92.0
       node-api-version: 0.2.1
       node-gyp: 9.0.0
@@ -2375,7 +2361,7 @@ snapshots:
 
   '@electron/universal@2.0.1':
     dependencies:
-      '@electron/asar': 3.2.7
+      '@electron/asar': 3.4.1
       '@malept/cross-spawn-promise': 2.0.0
       debug: 4.4.3
       dir-compare: 4.2.0
@@ -2548,7 +2534,7 @@ snapshots:
   '@isaacs/cliui@8.0.2':
     dependencies:
       string-width: 5.1.2
-      string-width-cjs: string-width@4.2.0
+      string-width-cjs: string-width@4.2.3
       strip-ansi: 7.2.0
       strip-ansi-cjs: strip-ansi@6.0.1
       wrap-ansi: 8.1.0
@@ -2690,7 +2676,7 @@ snapshots:
   '@rollup/rollup-win32-x64-msvc@4.61.1':
     optional: true
 
-  '@sindresorhus/is@3.1.1': {}
+  '@sindresorhus/is@4.0.0': {}
 
   '@szmarczak/http-timer@4.0.6':
     dependencies:
@@ -3054,14 +3040,14 @@ snapshots:
 
   cacheable-lookup@5.0.4: {}
 
-  cacheable-request@7.0.1:
+  cacheable-request@7.0.2:
     dependencies:
       clone-response: 1.0.3
       get-stream: 5.2.0
       http-cache-semantics: 4.2.0
       keyv: 4.0.0
       lowercase-keys: 2.0.0
-      normalize-url: 4.1.0
+      normalize-url: 6.0.1
       responselike: 2.0.1
 
   call-bind-apply-helpers@1.0.2:
@@ -3093,7 +3079,7 @@ snapshots:
   cli-truncate@2.1.0:
     dependencies:
       slice-ansi: 3.0.0
-      string-width: 4.2.0
+      string-width: 4.2.3
     optional: true
 
   cliui@8.0.1:
@@ -3541,14 +3527,14 @@ snapshots:
 
   gopd@1.2.0: {}
 
-  got@11.7.0:
+  got@11.8.5:
     dependencies:
-      '@sindresorhus/is': 3.1.1
+      '@sindresorhus/is': 4.0.0
       '@szmarczak/http-timer': 4.0.6
       '@types/cacheable-request': 6.0.3
       '@types/responselike': 1.0.3
       cacheable-lookup: 5.0.4
-      cacheable-request: 7.0.1
+      cacheable-request: 7.0.2
       decompress-response: 6.0.0
       http2-wrapper: 1.0.3
       lowercase-keys: 2.0.0
@@ -3899,7 +3885,7 @@ snapshots:
 
   normalize-path@3.0.0: {}
 
-  normalize-url@4.1.0: {}
+  normalize-url@6.0.1: {}
 
   npmlog@6.0.2:
     dependencies:
@@ -3924,7 +3910,7 @@ snapshots:
       is-interactive: 1.0.0
       log-symbols: 4.1.0
       mute-stream: 0.0.8
-      strip-ansi: 6.0.0
+      strip-ansi: 6.0.1
       wcwidth: 1.0.1
 
   p-cancelable@2.1.1: {}
@@ -4016,7 +4002,7 @@ snapshots:
   readable-stream@3.6.2:
     dependencies:
       inherits: 2.0.4
-      string_decoder: 1.3.0
+      string_decoder: 1.1.1
       util-deprecate: 1.0.2
 
   readdir-glob@1.0.0:
@@ -4084,8 +4070,6 @@ snapshots:
       fsevents: 2.3.3
 
   safe-buffer@5.1.2: {}
-
-  safe-buffer@5.2.1: {}
 
   safer-buffer@2.1.2: {}
 
@@ -4164,12 +4148,6 @@ snapshots:
 
   stat-mode@1.0.0: {}
 
-  string-width@4.2.0:
-    dependencies:
-      emoji-regex: 8.0.0
-      is-fullwidth-code-point: 3.0.0
-      strip-ansi: 6.0.0
-
   string-width@4.2.3:
     dependencies:
       emoji-regex: 8.0.0
@@ -4185,14 +4163,6 @@ snapshots:
   string_decoder@1.1.1:
     dependencies:
       safe-buffer: 5.1.2
-
-  string_decoder@1.3.0:
-    dependencies:
-      safe-buffer: 5.2.1
-
-  strip-ansi@6.0.0:
-    dependencies:
-      ansi-regex: 5.0.1
 
   strip-ansi@6.0.1:
     dependencies:

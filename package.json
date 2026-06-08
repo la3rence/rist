@@ -9,17 +9,18 @@
   "type": "module",
   "scripts": {
     "dev": "electron-vite dev",
-    "predev": "node scripts/ensure-electron.mjs",
-    "postinstall": "node scripts/ensure-electron.mjs",
+    "postinstall": "npx install-electron",
     "typecheck": "tsc --noEmit",
     "build": "electron-vite build",
-    "dist:mac": "pnpm build && electron-builder --mac --publish=never",
+    "pack:mac": "uv run --managed-python --no-project electron-builder --mac --publish=never -c.electronDist=node_modules/electron/dist",
+    "dist:mac": "pnpm build && pnpm pack:mac",
     "dist:win": "pnpm build && electron-builder --win --publish=never",
     "preview": "electron-vite preview"
   },
   "build": {
     "appId": "app.rist.desktop",
     "productName": "Rist",
+    "npmRebuild": false,
     "directories": {
       "output": "release"
     },
