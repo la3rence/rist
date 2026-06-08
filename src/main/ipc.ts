@@ -15,6 +15,8 @@ export function registerIpc(): void {
   ipcMain.handle('redis:previewKey', (_event, connectionId, key) => redis.previewKey(connectionId, key));
   ipcMain.handle('redis:deleteKey', (_event, connectionId, key) => redis.deleteKey(connectionId, key));
   ipcMain.handle('redis:setKey', (_event, request) => redis.setKey(request));
+  ipcMain.handle('redis:setKeyTtl', (_event, request) => redis.setKeyTtl(request.connectionId, request.key, request.ttl));
+  ipcMain.handle('redis:setHashField', (_event, request) => redis.setHashField(request.connectionId, request.key, request.field, request.value));
   ipcMain.handle('redis:runCommand', (_event, request) => redis.runCommand(request));
   ipcMain.handle('redis:ping', (_event, connectionId) => redis.ping(connectionId));
 }

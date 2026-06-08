@@ -75,7 +75,20 @@ export type SetKeyRequest = {
   key: string;
   type: 'string' | 'hash' | 'list' | 'set' | 'zset';
   value: unknown;
-  ttl?: number;
+  ttl?: number | null;
+};
+
+export type SetKeyTtlRequest = {
+  connectionId: string;
+  key: string;
+  ttl: number | null;
+};
+
+export type SetHashFieldRequest = {
+  connectionId: string;
+  key: string;
+  field: string;
+  value: string;
 };
 
 export type ConsoleCommandRequest = {
@@ -89,6 +102,7 @@ export type ConsoleCommandResult = {
 
 export type RedisGuiApi = {
   platform: string;
+  openSettings(): Promise<void>;
   loadConnections(): Promise<SavedConnections | undefined>;
   saveConnections(config: SavedConnections): Promise<void>;
   connect(config: RedisConnectionConfig): Promise<ConnectionSummary>;
@@ -98,6 +112,8 @@ export type RedisGuiApi = {
   previewKey(connectionId: string, key: string): Promise<KeyPreview>;
   deleteKey(connectionId: string, key: string): Promise<number>;
   setKey(request: SetKeyRequest): Promise<void>;
+  setKeyTtl(request: SetKeyTtlRequest): Promise<void>;
+  setHashField(request: SetHashFieldRequest): Promise<void>;
   runCommand(request: ConsoleCommandRequest): Promise<ConsoleCommandResult>;
   ping(connectionId: string): Promise<string>;
 };

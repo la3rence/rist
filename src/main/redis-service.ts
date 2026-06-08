@@ -140,25 +140,46 @@ export class RedisService {
         break;
       case 'hash':
         await client.del(request.key);
-        await client.hset(request.key, request.value as Record<string, string>);
+        if (Object.keys(request.value as Record<string, string>).length > 0) {
+          await client.hset(request.key, request.value as Record<string, string>);
+        }
         break;
       case 'list':
         await client.del(request.key);
-        await client.rpush(request.key, ...(request.value as string[]));
+        if ((request.value as string[]).length > 0) {
+          await client.rpush(request.key, ...(request.value as string[]));
+        }
         break;
       case 'set':
         await client.del(request.key);
-        await client.sadd(request.key, ...(request.value as string[]));
+        if ((request.value as string[]).length > 0) {
+          await client.sadd(request.key, ...(request.value as string[]));
+        }
         break;
       case 'zset':
         await client.del(request.key);
-        await client.zadd(request.key, ...(request.value as string[]));
+        if ((request.value as string[]).length > 0) {
+          await client.zadd(request.key, ...(request.value as string[]));
+        }
         break;
     }
 
-    if (request.ttl && request.ttl > 0) {
+    if (request.ttl !== null && request.ttl !== undefined && request.ttl > 0) {
       await client.expire(request.key, request.ttl);
     }
+  }
+
+  async setKeyTtl(connectionId: string, key: string, ttl: number | null): Promise<void> {
+    const client = this.get(connectionId).client;
+    if (ttl !== null && ttl > 0) {
+      await client.expire(key, ttl);
+      return;
+    }
+    await client.persist(key);
+  }
+
+  async setHashField(connectionId: string, key: string, field: string, value: string): Promise<void> {
+    await this.get(connectionId).client.hset(key, field, value);
   }
 
   async runCommand(request: ConsoleCommandRequest): Promise<ConsoleCommandResult> {
@@ -223,17 +244,21 @@ export class RedisService {
   private async scanCluster(client: Cluster, request: ScanKeysRequest): Promise<ScanKeysResult> {
     const masters = client.nodes('master');
     const keys: KeySummary[] = [];
+    const cursors = parseClusterCursor(request.cursor);
+    const nextCursors: Record<string, string> = {};
 
     await Promise.all(
       masters.map(async (node) => {
-        const [cursor, nodeKeys] = await node.scan(request.cursor || '0', 'MATCH', request.pattern || '*', 'COUNT', String(request.count ?? 50));
+        const nodeId = `${node.options.host}:${node.options.port}`;
+        const [cursor, nodeKeys] = await node.scan(cursors[nodeId] ?? '0', 'MATCH', request.pattern || '*', 'COUNT', String(request.count ?? 50));
         const described = await this.describeKeys(node, nodeKeys);
-        described.forEach((item) => keys.push({ ...item, node: `${node.options.host}:${node.options.port}` }));
-        return cursor;
+        described.forEach((item) => keys.push({ ...item, node: nodeId }));
+        nextCursors[nodeId] = cursor;
       })
     );
 
-    return { cursor: '0', keys };
+    const hasMore = Object.values(nextCursors).some((cursor) => cursor !== '0');
+    return { cursor: hasMore ? JSON.stringify(nextCursors) : '0', keys };
   }
 
   private async describeKeys(client: RedisClient, keys: string[]): Promise<KeySummary[]> {
@@ -270,6 +295,25 @@ function pairList(items: string[]): Record<string, string> {
     output[items[index]] = items[index + 1];
   }
   return output;
+}
+
+function parseClusterCursor(cursor: string | undefined): Record<string, string> {
+  if (!cursor || cursor === '0') {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(cursor) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return {};
+    }
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+        .map(([node, nodeCursor]) => [node, nodeCursor])
+    );
+  } catch {
+    return {};
+  }
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
