@@ -42,7 +42,7 @@ function createWindow(): void {
     titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
     ...(isMac ? { trafficLightPosition: { x: 20, y: 20 } } : { titleBarOverlay: titleBarOverlayOptions() }),
     transparent: true,
-    ...(isMac ? { vibrancy: 'appearance-based' as const, visualEffectState: 'active' as const } : {}),
+    ...(isMac ? { vibrancy: 'under-window' as const, visualEffectState: 'active' as const } : {}),
     ...(isWindows ? { backgroundMaterial: 'acrylic' as const } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.mjs'),
@@ -89,7 +89,7 @@ function openSettingsWindow(): void {
     titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
     ...(isMac ? { trafficLightPosition: { x: 18, y: 18 } } : { titleBarOverlay: titleBarOverlayOptions() }),
     transparent: true,
-    ...(isMac ? { vibrancy: 'appearance-based' as const, visualEffectState: 'active' as const } : {}),
+    ...(isMac ? { vibrancy: 'under-window' as const, visualEffectState: 'active' as const } : {}),
     ...(isWindows ? { backgroundMaterial: 'acrylic' as const } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.mjs'),
