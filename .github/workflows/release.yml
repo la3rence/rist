@@ -1,0 +1,61 @@
+name: Release builds
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macOS
+            os: macos-latest
+            script: dist:mac
+            artifacts: |
+              release/*.dmg
+              release/*-mac.zip
+          - platform: Windows
+            os: windows-latest
+            script: dist:win
+            artifacts: |
+              release/*.exe
+              release/*.zip
+
+    env:
+      ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build release artifacts
+        run: pnpm ${{ matrix.script }}
+
+      - name: Upload artifacts to GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: ${{ matrix.artifacts }}

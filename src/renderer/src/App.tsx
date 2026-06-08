@@ -1,4 +1,4 @@
-import { CSSProperties, FormEvent, MouseEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { CSSProperties, FormEvent, MouseEvent, ReactElement, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Copy,
   Database,
@@ -48,7 +48,7 @@ function createConnectionConfig(name = 'Local Redis'): RedisConnectionConfig {
 
 const initialConfig = createConnectionConfig();
 
-export default function App(): JSX.Element {
+export default function App(): ReactElement {
   const platform = window.redisGui?.platform ?? 'unknown';
   const [view, setView] = useState<View>('browser');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -466,7 +466,7 @@ function BrowserView(props: {
   onPatternChange(pattern: string): void;
   onRefresh(): void;
   onSelectKey(key: string): void;
-}): JSX.Element {
+}): ReactElement {
   return (
     <>
       <header className="toolbar">
@@ -542,7 +542,7 @@ function ConsoleView(props: {
   onCommandChange(command: string): void;
   onDeleteEntry(id: string): void;
   onRunCommand(event: FormEvent<HTMLFormElement>): void;
-}): JSX.Element {
+}): ReactElement {
   const commandInput = useRef<HTMLInputElement>(null);
   const historyPane = useRef<HTMLDivElement>(null);
   const lastEntry = props.history[props.history.length - 1];
@@ -619,7 +619,7 @@ function ConnectionsView(props: {
   saveState: SaveState;
   testMessage: string;
   testState: TestState;
-}): JSX.Element {
+}): ReactElement {
   const endpoint = props.selectedConfig.endpoints[0] ?? { host: '127.0.0.1', port: 6379 };
   const selectedColor = props.selectedConfig.color;
   const [profilesWidth, setProfilesWidth] = useState(280);

@@ -4,13 +4,17 @@
   "private": true,
   "description": "A quiet cross-platform Redis desktop client.",
   "author": "la3rence",
+  "packageManager": "pnpm@11.1.2",
   "main": "out/main/index.js",
   "type": "module",
   "scripts": {
     "dev": "electron-vite dev",
+    "predev": "node scripts/ensure-electron.mjs",
+    "postinstall": "node scripts/ensure-electron.mjs",
     "typecheck": "tsc --noEmit",
     "build": "electron-vite build",
-    "dist:mac": "pnpm build && ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ electron-builder --mac",
+    "dist:mac": "pnpm build && electron-builder --mac --publish=never",
+    "dist:win": "pnpm build && electron-builder --win --publish=never",
     "preview": "electron-vite preview"
   },
   "build": {
@@ -35,26 +39,39 @@
     },
     "dmg": {
       "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        "nsis",
+        "zip"
+      ]
+    },
+    "nsis": {
+      "artifactName": "${productName}-Setup-${version}-${arch}.${ext}",
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
     }
   },
   "dependencies": {
     "@electron-toolkit/utils": "^4.0.0",
-    "ioredis": "^5.8.2",
-    "lucide-react": "^0.468.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "ssh2": "^1.16.0"
+    "ioredis": "^5.11.1",
+    "lucide-react": "^1.17.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "ssh2": "^1.17.0"
   },
   "devDependencies": {
-    "@types/node": "^22.10.2",
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
-    "@types/ssh2": "^1.15.4",
-    "@vitejs/plugin-react": "^4.3.4",
-    "electron": "^33.2.1",
+    "@types/node": "^24.13.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@types/ssh2": "^1.15.5",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "^42.3.3",
     "electron-builder": "^25.1.8",
-    "electron-vite": "^2.3.0",
-    "typescript": "^5.7.2",
-    "vite": "^6.0.3"
+    "electron-vite": "^5.0.0",
+    "typescript": "^6.0.3",
+    "vite": "^7.3.5"
   }
 }
