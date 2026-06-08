@@ -1,11 +1,18 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { ConsoleCommandRequest, RedisConnectionConfig, RedisGuiApi, SavedConnections, ScanKeysRequest, SetHashFieldRequest, SetKeyRequest, SetKeyTtlRequest } from '../shared/types';
+import type { AppSettings, ConsoleCommandRequest, RedisConnectionConfig, RedisGuiApi, SavedConnections, ScanKeysRequest, SetHashFieldRequest, SetKeyRequest, SetKeyTtlRequest } from '../shared/types';
 
 const api: RedisGuiApi = {
   platform: process.platform,
   openSettings: () => ipcRenderer.invoke('app:openSettings'),
   loadConnections: () => ipcRenderer.invoke('config:loadConnections'),
   saveConnections: (config: SavedConnections) => ipcRenderer.invoke('config:saveConnections', config),
+  loadSettings: () => ipcRenderer.invoke('config:loadSettings'),
+  saveSettings: (settings: AppSettings) => ipcRenderer.invoke('config:saveSettings', settings),
+  onSettingsChanged: (listener: (settings: AppSettings) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, settings: AppSettings): void => listener(settings);
+    ipcRenderer.on('config:settingsChanged', handler);
+    return () => ipcRenderer.removeListener('config:settingsChanged', handler);
+  },
   connect: (config: RedisConnectionConfig) => ipcRenderer.invoke('redis:connect', config),
   testConnection: (config: RedisConnectionConfig) => ipcRenderer.invoke('redis:testConnection', config),
   disconnect: (connectionId: string) => ipcRenderer.invoke('redis:disconnect', connectionId),

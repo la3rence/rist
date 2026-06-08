@@ -34,14 +34,22 @@ import {
   Trash2,
   X
 } from 'lucide-react';
-import type { ConnectionSummary, KeyPreview, KeySummary, RedisConnectionConfig, SavedConnections, ScanKeysResult, SetKeyRequest, SshTunnelConfig } from '../../shared/types';
+import type { AppSettings, ConnectionSummary, KeyPreview, KeySummary, RedisConnectionConfig, SavedConnections, ScanKeysResult, SetKeyRequest, SshTunnelConfig } from '../../shared/types';
 
 type View = 'browser' | 'console' | 'connections';
 type SaveState = 'saved' | 'dirty' | 'saving' | 'error';
 type TestState = 'idle' | 'testing' | 'success' | 'error';
-type KeyListMode = 'raw' | 'tree';
+type KeyListMode = AppSettings['keyListMode'];
 type EditableKeyType = SetKeyRequest['type'];
 type SettingsTab = 'general' | 'query' | 'editor';
+type NewKeyDraft = {
+  key: string;
+  type: 'string' | 'hash';
+  value: string;
+  hashField: string;
+  hashValue: string;
+  ttl: string;
+};
 
 type ConsoleEntry = {
   id: string;
@@ -59,9 +67,9 @@ type KeyTreeNode = {
 
 const defaultSshTunnel: SshTunnelConfig = { enabled: false, host: '', port: 22, username: '' };
 const connectionColors = ['#ef4444', '#f97316', '#f59e0b', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#64748b'];
+const defaultSettings: AppSettings = { keyListMode: 'raw', keyScanCount: 1000, themeMode: 'system' };
 const collapsedSidebarWidth = 88;
 const collapseThreshold = 128;
-const keyScanCount = 1000;
 
 function createConnectionConfig(name = 'Local Redis'): RedisConnectionConfig {
   return {
@@ -105,7 +113,7 @@ function MainApp(): ReactElement {
   const [savingTtl, setSavingTtl] = useState(false);
   const [pattern, setPattern] = useState('*');
   const [scanCursor, setScanCursor] = useState('0');
-  const [keyListMode, setKeyListMode] = useState<KeyListMode>('raw');
+  const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [expandedKeyGroups, setExpandedKeyGroups] = useState<Set<string>>(() => new Set());
   const [status, setStatus] = useState('Ready');
   const [busy, setBusy] = useState(false);
@@ -149,6 +157,33 @@ function MainApp(): ReactElement {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function loadSettings(): Promise<void> {
+      try {
+        const loadedSettings = await getRedisGuiApi().loadSettings();
+        if (!cancelled) {
+          setSettings(normalizeAppSettings(loadedSettings));
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setStatus(error instanceof Error ? error.message : 'Unable to load settings');
+        }
+      }
+    }
+
+    void loadSettings();
+    const unsubscribe = getRedisGuiApi().onSettingsChanged((nextSettings) => {
+      setSettings(normalizeAppSettings(nextSettings));
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
     if (!connection) return;
     const requestId = ++scanRequestRef.current;
     const timer = window.setTimeout(() => {
@@ -158,7 +193,7 @@ function MainApp(): ReactElement {
     return () => {
       window.clearTimeout(timer);
     };
-  }, [connection?.id, pattern]);
+  }, [connection?.id, pattern, settings.keyScanCount]);
 
   useEffect(() => {
     function handleSettingsShortcut(event: globalThis.KeyboardEvent): void {
@@ -376,7 +411,7 @@ function MainApp(): ReactElement {
 
     async function scanBatch(nextCursor?: string): Promise<ScanKeysResult | null> {
       if (isCurrent && !isCurrent()) return null;
-      const result = await api.scanKeys({ connectionId, pattern: normalizedPattern, count: keyScanCount, cursor: nextCursor });
+      const result = await api.scanKeys({ connectionId, pattern: normalizedPattern, count: settings.keyScanCount, cursor: nextCursor });
       if (isCurrent && !isCurrent()) return null;
       return result;
     }
@@ -457,6 +492,30 @@ function MainApp(): ReactElement {
       setStatus(message);
     } finally {
       setSavingValue(false);
+    }
+  }
+
+  async function createKey(draft: NewKeyDraft): Promise<void> {
+    if (!connection) return;
+    setBusy(true);
+    setValueEditError('');
+    try {
+      const request = buildCreateKeyRequest(connection.id, draft);
+      await getRedisGuiApi().setKey(request);
+      const nextPreview = await getRedisGuiApi().previewKey(connection.id, request.key);
+      syncPreviewDrafts(nextPreview);
+      setSelectedKey(nextPreview.key);
+      setKeys((items) =>
+        sortKeySummaries(mergeKeySummaries(items, [{ key: nextPreview.key, type: nextPreview.type, ttl: nextPreview.ttl }]))
+      );
+      setStatus(`Created ${nextPreview.key}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Create key failed';
+      setValueEditError(message);
+      setStatus(message);
+      throw error;
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -704,7 +763,10 @@ function MainApp(): ReactElement {
   }
 
   return (
-    <main className={`${sidebarCollapsed ? 'app-shell sidebar-collapsed' : 'app-shell'} platform-${platform}`} style={{ '--sidebar-width': `${sidebarWidth}px` } as CSSProperties}>
+    <main
+      className={`${sidebarCollapsed ? 'app-shell sidebar-collapsed' : 'app-shell'} platform-${platform} theme-${settings.themeMode}`}
+      style={{ '--sidebar-width': `${sidebarWidth}px` } as CSSProperties}
+    >
       <aside className="sidebar">
         <div className="window-drag" />
         <button className="sidebar-toggle" onClick={() => setSidebarCollapsed((value) => !value)} title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
@@ -748,7 +810,7 @@ function MainApp(): ReactElement {
             busy={busy}
             connection={connection}
             expandedGroups={expandedKeyGroups}
-            keyListMode={keyListMode}
+            keyListMode={settings.keyListMode}
             keyTree={keyTree}
             keys={keys}
             keysLength={keys.length}
@@ -770,10 +832,10 @@ function MainApp(): ReactElement {
             onDeleteSelected={() => void deleteSelected()}
             onDeleteKey={(key) => void deleteKey(key)}
             onDeleteBatchSelected={() => void deleteBatchSelected()}
-            onKeyListModeChange={setKeyListMode}
             onLoadMore={() => void loadMoreKeys()}
             onPatternChange={setPattern}
             onRefresh={() => void refresh()}
+            onCreateKey={(draft) => createKey(draft)}
             onSaveValue={() => void saveSelectedValue()}
             onSaveHashField={(field, value) => void saveHashField(field, value)}
             onSaveTtl={() => void saveSelectedTtl()}
@@ -831,6 +893,8 @@ function MainApp(): ReactElement {
 function SettingsWindowView(): ReactElement {
   const platform = window.redisGui?.platform ?? 'unknown';
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+  const [settingsDraft, setSettingsDraft] = useState<AppSettings>(defaultSettings);
+  const [settingsError, setSettingsError] = useState('');
 
   useEffect(() => {
     function handleWindowShortcut(event: globalThis.KeyboardEvent): void {
@@ -850,17 +914,56 @@ function SettingsWindowView(): ReactElement {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSettings(): Promise<void> {
+      try {
+        const loadedSettings = await getRedisGuiApi().loadSettings();
+        if (!cancelled) {
+          setSettingsDraft(normalizeAppSettings(loadedSettings));
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setSettingsError(error instanceof Error ? error.message : 'Unable to load settings');
+        }
+      }
+    }
+
+    void loadSettings();
+    const unsubscribe = getRedisGuiApi().onSettingsChanged((nextSettings) => {
+      setSettingsDraft(normalizeAppSettings(nextSettings));
+      setSettingsError('');
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
+
+  function updateSettingsDraft(patch: Partial<AppSettings>): void {
+    const nextSettings = normalizeAppSettings({ ...settingsDraft, ...patch });
+    setSettingsDraft(nextSettings);
+    setSettingsError('');
+    void saveSettings(nextSettings);
+  }
+
+  async function saveSettings(nextSettings: AppSettings): Promise<void> {
+    try {
+      const saved = await getRedisGuiApi().saveSettings(nextSettings);
+      setSettingsDraft(normalizeAppSettings(saved));
+      setSettingsError('');
+    } catch (error) {
+      setSettingsError(error instanceof Error ? error.message : 'Unable to save settings');
+    }
+  }
+
   const tabLabel = activeTab === 'general' ? '通用' : activeTab === 'query' ? '查询' : '编辑器';
 
   return (
-    <main className={`settings-window platform-${platform}`}>
+    <main className={`settings-window platform-${platform} theme-${settingsDraft.themeMode}`}>
       <section className="settings-dialog" aria-label="设置">
-        <header className="settings-header">
-          <h1>设置</h1>
-          <button className="icon-button" onClick={() => window.close()} title="Close settings">
-            <X size={15} />
-          </button>
-        </header>
         <div className="settings-layout">
           <nav className="settings-tabs" aria-label="Settings sections">
             <button className={activeTab === 'general' ? 'settings-tab active' : 'settings-tab'} onClick={() => setActiveTab('general')}>
@@ -875,7 +978,51 @@ function SettingsWindowView(): ReactElement {
           </nav>
           <section className="settings-panel">
             <h2>{tabLabel}</h2>
-            <div className="settings-placeholder">暂无配置项</div>
+            {activeTab === 'general' ? (
+              <div className="settings-section">
+                <div className="section-title">主题</div>
+                <div className="settings-segmented theme-mode-control" role="group" aria-label="主题">
+                  <button className={settingsDraft.themeMode === 'system' ? 'segmented active' : 'segmented'} onClick={() => updateSettingsDraft({ themeMode: 'system' })}>
+                    跟随系统
+                  </button>
+                  <button className={settingsDraft.themeMode === 'light' ? 'segmented active' : 'segmented'} onClick={() => updateSettingsDraft({ themeMode: 'light' })}>
+                    浅色
+                  </button>
+                  <button className={settingsDraft.themeMode === 'dark' ? 'segmented active' : 'segmented'} onClick={() => updateSettingsDraft({ themeMode: 'dark' })}>
+                    深色
+                  </button>
+                </div>
+              </div>
+            ) : null}
+            {activeTab === 'query' ? (
+              <div className="settings-section">
+                <div className="section-title">Key Browser</div>
+                <label>
+                  Key 折叠模式
+                  <div className="settings-segmented" role="group" aria-label="Key 折叠模式">
+                    <button className={settingsDraft.keyListMode === 'raw' ? 'segmented active' : 'segmented'} onClick={() => updateSettingsDraft({ keyListMode: 'raw' })}>
+                      Raw
+                    </button>
+                    <button className={settingsDraft.keyListMode === 'tree' ? 'segmented active' : 'segmented'} onClick={() => updateSettingsDraft({ keyListMode: 'tree' })}>
+                      Prefix
+                    </button>
+                  </div>
+                </label>
+                <label>
+                  每次游标扫描最大 Count
+                  <input
+                    type="number"
+                    min="10"
+                    max="10000"
+                    step="10"
+                    value={settingsDraft.keyScanCount}
+                    onChange={(event) => updateSettingsDraft({ keyScanCount: Number(event.target.value) || defaultSettings.keyScanCount })}
+                  />
+                </label>
+              </div>
+            ) : null}
+            {activeTab === 'editor' ? <div className="settings-placeholder">暂无配置项</div> : null}
+            {settingsError ? <p className="settings-error">{settingsError}</p> : null}
           </section>
         </div>
       </section>
@@ -909,9 +1056,9 @@ function BrowserView(props: {
   onDeleteBatchSelected(): void;
   onDeleteKey(key: string): void;
   onDeleteSelected(): void;
-  onKeyListModeChange(mode: KeyListMode): void;
   onLoadMore(): void;
   onPatternChange(pattern: string): void;
+  onCreateKey(draft: NewKeyDraft): Promise<void>;
   onRefresh(): void;
   onSaveHashField(field: string, value: string): void;
   onSaveValue(): void;
@@ -928,6 +1075,9 @@ function BrowserView(props: {
   const [ttlEditing, setTtlEditing] = useState(false);
   const [batchDragging, setBatchDragging] = useState(false);
   const [keyPaneWidth, setKeyPaneWidth] = useState(360);
+  const [creatingKey, setCreatingKey] = useState(false);
+  const [newKeyDraft, setNewKeyDraft] = useState<NewKeyDraft>(createEmptyNewKeyDraft);
+  const [newKeyError, setNewKeyError] = useState('');
   const batchMode = props.batchSelectedKeys.size > 0;
 
   useEffect(() => {
@@ -1063,6 +1213,18 @@ function BrowserView(props: {
     window.addEventListener('mouseup', stopResize);
   }
 
+  async function submitNewKey(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    setNewKeyError('');
+    try {
+      await props.onCreateKey(newKeyDraft);
+      setNewKeyDraft(createEmptyNewKeyDraft());
+      setCreatingKey(false);
+    } catch (error) {
+      setNewKeyError(error instanceof Error ? error.message : 'Create key failed');
+    }
+  }
+
   return (
     <>
       <header className="toolbar">
@@ -1070,16 +1232,16 @@ function BrowserView(props: {
           <Search size={16} />
           <input value={props.pattern} onChange={(event) => props.onPatternChange(event.target.value)} />
         </div>
-        <div className="list-mode-toggle" role="group" aria-label="Key list mode">
-          <button className={props.keyListMode === 'raw' ? 'segmented active' : 'segmented'} onClick={() => props.onKeyListModeChange('raw')}>
-            Raw
-          </button>
-          <button className={props.keyListMode === 'tree' ? 'segmented active' : 'segmented'} onClick={() => props.onKeyListModeChange('tree')}>
-            Prefix
-          </button>
-        </div>
         <button className="icon-button" disabled={!props.connection || props.busy} onClick={props.onRefresh} title="Refresh keys">
           <RefreshCcw size={16} />
+        </button>
+        <button
+          className={creatingKey ? 'icon-button active' : 'icon-button'}
+          disabled={!props.connection || props.busy}
+          onClick={() => setCreatingKey((value) => !value)}
+          title={creatingKey ? 'Close new key form' : 'Add key'}
+        >
+          {creatingKey ? <X size={16} /> : <Plus size={16} />}
         </button>
         {batchMode ? (
           <div className="batch-actions">
@@ -1094,7 +1256,80 @@ function BrowserView(props: {
         ) : null}
       </header>
 
-      <section className="workspace" style={{ '--key-pane-width': `${keyPaneWidth}px` } as CSSProperties}>
+      <section className={creatingKey ? 'workspace creating-key' : 'workspace'} style={{ '--key-pane-width': `${keyPaneWidth}px` } as CSSProperties}>
+        {creatingKey ? (
+          <form className="new-key-form" onSubmit={(event) => void submitNewKey(event)}>
+            <label>
+              Key
+              <input
+                autoFocus
+                value={newKeyDraft.key}
+                onChange={(event) => setNewKeyDraft((draft) => ({ ...draft, key: event.target.value }))}
+                spellCheck={false}
+              />
+            </label>
+            <div className="new-key-type" role="group" aria-label="New key type">
+              <button
+                className={newKeyDraft.type === 'string' ? 'segmented active' : 'segmented'}
+                type="button"
+                onClick={() => setNewKeyDraft((draft) => ({ ...draft, type: 'string' }))}
+              >
+                String
+              </button>
+              <button
+                className={newKeyDraft.type === 'hash' ? 'segmented active' : 'segmented'}
+                type="button"
+                onClick={() => setNewKeyDraft((draft) => ({ ...draft, type: 'hash' }))}
+              >
+                Hash
+              </button>
+            </div>
+            {newKeyDraft.type === 'hash' ? (
+              <>
+                <label>
+                  Field
+                  <input
+                    value={newKeyDraft.hashField}
+                    onChange={(event) => setNewKeyDraft((draft) => ({ ...draft, hashField: event.target.value }))}
+                    spellCheck={false}
+                  />
+                </label>
+                <label>
+                  Value
+                  <input
+                    value={newKeyDraft.hashValue}
+                    onChange={(event) => setNewKeyDraft((draft) => ({ ...draft, hashValue: event.target.value }))}
+                    spellCheck={false}
+                  />
+                </label>
+              </>
+            ) : (
+              <label>
+                Value
+                <input
+                  value={newKeyDraft.value}
+                  onChange={(event) => setNewKeyDraft((draft) => ({ ...draft, value: event.target.value }))}
+                  spellCheck={false}
+                />
+              </label>
+            )}
+            <label>
+              TTL
+              <input
+                type="number"
+                min="1"
+                placeholder="Persist"
+                value={newKeyDraft.ttl}
+                onChange={(event) => setNewKeyDraft((draft) => ({ ...draft, ttl: event.target.value }))}
+              />
+            </label>
+            <button className="primary compact-primary" disabled={props.busy} type="submit">
+              <Plus size={14} />
+              Add
+            </button>
+            {newKeyError ? <p className="new-key-error">{newKeyError}</p> : null}
+          </form>
+        ) : null}
         <section className="key-pane">
           <div className="pane-title">
             <KeyRound size={15} />
@@ -1279,11 +1514,19 @@ function HashPreviewTable(props: {
   const entries = getHashEntries(props.preview.value);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [fieldDraft, setFieldDraft] = useState('');
+  const [addingField, setAddingField] = useState(false);
+  const [newFieldDraft, setNewFieldDraft] = useState('');
+  const [newValueDraft, setNewValueDraft] = useState('');
+  const [newFieldError, setNewFieldError] = useState('');
   const cancellingEdit = useRef(false);
 
   useEffect(() => {
     setEditingField(null);
     setFieldDraft('');
+    setAddingField(false);
+    setNewFieldDraft('');
+    setNewValueDraft('');
+    setNewFieldError('');
   }, [props.preview.key]);
 
   function beginFieldEdit(field: string, value: string): void {
@@ -1325,38 +1568,80 @@ function HashPreviewTable(props: {
     }
   }
 
-  if (entries.length === 0) {
-    return <pre className="value-preview">(empty hash)</pre>;
+  function submitNewField(event: FormEvent<HTMLFormElement>): void {
+    event.preventDefault();
+    const field = newFieldDraft.trim();
+    if (!field) {
+      setNewFieldError('Field is required.');
+      return;
+    }
+    if (entries.some(([itemField]) => itemField === field)) {
+      setNewFieldError('Field already exists.');
+      return;
+    }
+    setNewFieldError('');
+    props.onSaveHashField(field, newValueDraft);
+    setAddingField(false);
+    setNewFieldDraft('');
+    setNewValueDraft('');
   }
 
   return (
-    <div className="hash-table" role="table" aria-label="Hash fields">
-      <div className="hash-table-head" role="row">
-        <div role="columnheader">Field</div>
-        <div role="columnheader">Content</div>
+    <div className="hash-preview">
+      <div className="hash-actions">
+        <button className={addingField ? 'icon-button active' : 'icon-button'} disabled={props.savingValue} onClick={() => setAddingField((value) => !value)} title="Add hash field">
+          {addingField ? <X size={15} /> : <Plus size={15} />}
+        </button>
       </div>
-      {entries.map(([field, value]) => (
-        <div className="hash-table-row" role="row" key={field}>
-          <div className="hash-field" role="cell" title={field}>
-            {field}
+      {addingField ? (
+        <form className="hash-add-form" onSubmit={submitNewField}>
+          <input
+            autoFocus
+            value={newFieldDraft}
+            onChange={(event) => setNewFieldDraft(event.target.value)}
+            placeholder="Field"
+            spellCheck={false}
+          />
+          <input value={newValueDraft} onChange={(event) => setNewValueDraft(event.target.value)} placeholder="Value" spellCheck={false} />
+          <button className="primary compact-primary" disabled={props.savingValue} type="submit">
+            <Plus size={14} />
+            Add
+          </button>
+          {newFieldError ? <p className="hash-add-error">{newFieldError}</p> : null}
+        </form>
+      ) : null}
+      {entries.length === 0 ? (
+        <pre className="value-preview">(empty hash)</pre>
+      ) : (
+        <div className="hash-table" role="table" aria-label="Hash fields">
+          <div className="hash-table-head" role="row">
+            <div role="columnheader">Field</div>
+            <div role="columnheader">Content</div>
           </div>
-          <div className="hash-content" role="cell" title={value} onDoubleClick={() => beginFieldEdit(field, value)}>
-            {editingField === field ? (
-              <input
-                autoFocus
-                className="hash-content-input"
-                disabled={props.savingValue}
-                value={fieldDraft}
-                onBlur={() => commitFieldEdit(field)}
-                onChange={(event) => setFieldDraft(event.target.value)}
-                onKeyDown={(event) => handleFieldKeyDown(event, field)}
-              />
-            ) : (
-              revealInvisibleText(value)
-            )}
-          </div>
+          {entries.map(([field, value]) => (
+            <div className="hash-table-row" role="row" key={field}>
+              <div className="hash-field" role="cell" title={field}>
+                {field}
+              </div>
+              <div className="hash-content" role="cell" title={value} onDoubleClick={() => beginFieldEdit(field, value)}>
+                {editingField === field ? (
+                  <input
+                    autoFocus
+                    className="hash-content-input"
+                    disabled={props.savingValue}
+                    value={fieldDraft}
+                    onBlur={() => commitFieldEdit(field)}
+                    onChange={(event) => setFieldDraft(event.target.value)}
+                    onKeyDown={(event) => handleFieldKeyDown(event, field)}
+                  />
+                ) : (
+                  revealInvisibleText(value)
+                )}
+              </div>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
     </div>
   );
 }
@@ -2015,6 +2300,15 @@ function normalizeScanPattern(pattern: string): string {
   return pattern.trim() || '*';
 }
 
+function normalizeAppSettings(value: Partial<AppSettings> | undefined): AppSettings {
+  const count = Number(value?.keyScanCount);
+  return {
+    keyListMode: value?.keyListMode === 'tree' ? 'tree' : defaultSettings.keyListMode,
+    keyScanCount: Number.isInteger(count) ? Math.min(10000, Math.max(10, count)) : defaultSettings.keyScanCount,
+    themeMode: value?.themeMode === 'light' || value?.themeMode === 'dark' ? value.themeMode : defaultSettings.themeMode
+  };
+}
+
 function isEditableKeyType(type: string): type is EditableKeyType {
   return type === 'string' || type === 'hash' || type === 'list' || type === 'set' || type === 'zset';
 }
@@ -2040,6 +2334,47 @@ function createValueDraft(preview: KeyPreview): string {
     return preview.value.map((item) => (typeof item === 'string' ? item : stringifyPreviewItem(item))).join('\n');
   }
   return '';
+}
+
+function createEmptyNewKeyDraft(): NewKeyDraft {
+  return {
+    key: '',
+    type: 'string',
+    value: '',
+    hashField: '',
+    hashValue: '',
+    ttl: ''
+  };
+}
+
+function buildCreateKeyRequest(connectionId: string, draft: NewKeyDraft): SetKeyRequest {
+  const key = draft.key.trim();
+  if (!key) {
+    throw new Error('Key is required.');
+  }
+
+  const ttl = parseTtlDraft(draft.ttl);
+  if (draft.type === 'hash') {
+    const field = draft.hashField.trim();
+    if (!field) {
+      throw new Error('Hash field is required.');
+    }
+    return {
+      connectionId,
+      key,
+      type: 'hash',
+      value: { [field]: draft.hashValue },
+      ttl
+    };
+  }
+
+  return {
+    connectionId,
+    key,
+    type: 'string',
+    value: draft.value,
+    ttl
+  };
 }
 
 function getHashEntries(value: unknown): Array<[string, string]> {

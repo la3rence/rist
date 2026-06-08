@@ -34,6 +34,12 @@ export type SavedConnections = {
   connections: RedisConnectionConfig[];
 };
 
+export type AppSettings = {
+  keyListMode: 'raw' | 'tree';
+  keyScanCount: number;
+  themeMode: 'system' | 'light' | 'dark';
+};
+
 export type ConnectionSummary = {
   id: string;
   name: string;
@@ -105,6 +111,9 @@ export type RedisGuiApi = {
   openSettings(): Promise<void>;
   loadConnections(): Promise<SavedConnections | undefined>;
   saveConnections(config: SavedConnections): Promise<void>;
+  loadSettings(): Promise<AppSettings>;
+  saveSettings(settings: AppSettings): Promise<AppSettings>;
+  onSettingsChanged(listener: (settings: AppSettings) => void): () => void;
   connect(config: RedisConnectionConfig): Promise<ConnectionSummary>;
   testConnection(config: RedisConnectionConfig): Promise<ConnectionSummary>;
   disconnect(connectionId: string): Promise<void>;

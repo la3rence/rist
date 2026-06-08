@@ -58,9 +58,11 @@ function createWindow(): void {
 
   if (!isMac) {
     nativeTheme.on('updated', () => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.setTitleBarOverlay(titleBarOverlayOptions());
-      }
+      BrowserWindow.getAllWindows().forEach((window) => {
+        if (!window.isDestroyed()) {
+          window.setTitleBarOverlay(titleBarOverlayOptions());
+        }
+      });
     });
   }
 
