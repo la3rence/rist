@@ -24,22 +24,10 @@ jobs:
         include:
           - platform: macOS
             os: macos-latest
-            script: dist:mac
-            artifacts: |
-              release/*.dmg
-              release/*.dmg.blockmap
-              release/*-mac.zip
-              release/*-mac.zip.blockmap
-              release/latest-mac.yml
+            script: publish:mac
           - platform: Windows
             os: windows-latest
-            script: dist:win
-            artifacts: |
-              release/*.exe
-              release/*.exe.blockmap
-              release/*.zip
-              release/*.zip.blockmap
-              release/latest.yml
+            script: publish:win
 
     env:
       ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
@@ -48,6 +36,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -69,11 +59,5 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Build release artifacts
+      - name: Build and publish release artifacts
         run: pnpm ${{ matrix.script }}
-
-      - name: Upload artifacts to GitHub Release
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-          files: ${{ matrix.artifacts }}
