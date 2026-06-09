@@ -1,9 +1,17 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { AppSettings, ConsoleCommandRequest, RedisConnectionConfig, RedisGuiApi, SavedConnections, ScanKeysRequest, SetHashFieldRequest, SetKeyRequest, SetKeyTtlRequest } from '../shared/types';
+import type { AppSettings, ConsoleCommandRequest, RedisConnectionConfig, RedisGuiApi, SavedConnections, ScanKeysRequest, SetHashFieldRequest, SetKeyRequest, SetKeyTtlRequest, UpdateStatus } from '../shared/types';
 
 const api: RedisGuiApi = {
   platform: process.platform,
   openSettings: () => ipcRenderer.invoke('app:openSettings'),
+  getUpdateStatus: () => ipcRenderer.invoke('updates:getStatus'),
+  checkForUpdates: () => ipcRenderer.invoke('updates:check'),
+  installUpdate: () => ipcRenderer.invoke('updates:install'),
+  onUpdateStatusChanged: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, status: UpdateStatus): void => listener(status);
+    ipcRenderer.on('updates:statusChanged', handler);
+    return () => ipcRenderer.removeListener('updates:statusChanged', handler);
+  },
   loadConnections: () => ipcRenderer.invoke('config:loadConnections'),
   saveConnections: (config: SavedConnections) => ipcRenderer.invoke('config:saveConnections', config),
   loadSettings: () => ipcRenderer.invoke('config:loadSettings'),

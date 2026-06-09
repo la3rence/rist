@@ -34,7 +34,7 @@ import {
   Trash2,
   X
 } from 'lucide-react';
-import type { AppSettings, ConnectionSummary, KeyPreview, KeySummary, RedisConnectionConfig, SavedConnections, ScanKeysResult, SetKeyRequest, SshTunnelConfig } from '../../shared/types';
+import type { AppSettings, ConnectionSummary, KeyPreview, KeySummary, RedisConnectionConfig, SavedConnections, ScanKeysResult, SetKeyRequest, SshTunnelConfig, UpdateStatus } from '../../shared/types';
 
 type View = 'browser' | 'console' | 'connections';
 type SaveState = 'saved' | 'dirty' | 'saving' | 'error';
@@ -68,6 +68,7 @@ type KeyTreeNode = {
 const defaultSshTunnel: SshTunnelConfig = { enabled: false, host: '', port: 22, username: '' };
 const connectionColors = ['#ef4444', '#f97316', '#f59e0b', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#64748b'];
 const defaultSettings: AppSettings = { keyListMode: 'raw', keyScanCount: 1000, themeMode: 'system' };
+const defaultUpdateStatus: UpdateStatus = { status: 'idle', currentVersion: '' };
 const collapsedSidebarWidth = 88;
 const collapseThreshold = 128;
 
@@ -92,8 +93,60 @@ export default function App(): ReactElement {
   return <MainApp />;
 }
 
+function useUpdateStatus(): {
+  updateStatus: UpdateStatus;
+  checkForUpdates(): Promise<void>;
+  installUpdate(): Promise<void>;
+} {
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>(defaultUpdateStatus);
+
+  useEffect(() => {
+    let cancelled = false;
+    const api = getRedisGuiApi();
+
+    api
+      .getUpdateStatus()
+      .then((status) => {
+        if (!cancelled) {
+          setUpdateStatus(status);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setUpdateStatus({
+            ...defaultUpdateStatus,
+            status: 'error',
+            message: error instanceof Error ? error.message : 'Unable to load update status'
+          });
+        }
+      });
+
+    const unsubscribe = api.onUpdateStatusChanged((status) => {
+      setUpdateStatus(status);
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
+
+  async function checkForUpdates(): Promise<void> {
+    const status = await getRedisGuiApi().checkForUpdates();
+    setUpdateStatus(status);
+  }
+
+  async function installUpdate(): Promise<void> {
+    const status = await getRedisGuiApi().installUpdate();
+    setUpdateStatus(status);
+  }
+
+  return { updateStatus, checkForUpdates, installUpdate };
+}
+
 function MainApp(): ReactElement {
   const platform = window.redisGui?.platform ?? 'unknown';
+  const { updateStatus, installUpdate } = useUpdateStatus();
   const [view, setView] = useState<View>('browser');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(236);
@@ -763,135 +816,162 @@ function MainApp(): ReactElement {
   }
 
   return (
-    <main
-      className={`${sidebarCollapsed ? 'app-shell sidebar-collapsed' : 'app-shell'} platform-${platform} theme-${settings.themeMode}`}
-      style={{ '--sidebar-width': `${sidebarWidth}px` } as CSSProperties}
-    >
-      <aside className="sidebar">
-        <div className="window-drag" />
-        <button className="sidebar-toggle" onClick={() => setSidebarCollapsed((value) => !value)} title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
-          <PanelLeft size={15} />
-        </button>
-        <div className="sidebar-top-spacer" />
+    <main className={`app-root platform-${platform} theme-${settings.themeMode}`}>
+      <WindowTitleBar title="Rist" updateStatus={updateStatus} onInstallUpdate={() => void installUpdate()} />
+      <section
+        className={`${sidebarCollapsed ? 'app-shell sidebar-collapsed' : 'app-shell'} platform-${platform}`}
+        style={{ '--sidebar-width': `${sidebarWidth}px` } as CSSProperties}
+      >
+        <aside className="sidebar">
+          <div className="window-drag" />
+          <button className="sidebar-toggle" onClick={() => setSidebarCollapsed((value) => !value)} title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+            <PanelLeft size={15} />
+          </button>
+          <div className="sidebar-top-spacer" />
 
-        <section className="nav-list">
-          <button className={view === 'connections' ? 'nav-item active' : 'nav-item'} onClick={() => setView('connections')} title="Connections">
-            <Settings2 size={16} />
-            <span>Connections</span>
-          </button>
-          <button className={view === 'browser' ? 'nav-item active' : 'nav-item'} onClick={() => setView('browser')} title="Browser">
-            <Server size={16} />
-            <span>Browser</span>
-          </button>
-          <button className={view === 'console' ? 'nav-item active' : 'nav-item'} onClick={() => setView('console')} title="Console">
-            <TerminalSquare size={16} />
-            <span>Console</span>
-          </button>
-        </section>
+          <section className="nav-list">
+            <button className={view === 'connections' ? 'nav-item active' : 'nav-item'} onClick={() => setView('connections')} title="Connections">
+              <Settings2 size={16} />
+              <span>Connections</span>
+            </button>
+            <button className={view === 'browser' ? 'nav-item active' : 'nav-item'} onClick={() => setView('browser')} title="Browser">
+              <Server size={16} />
+              <span>Browser</span>
+            </button>
+            <button className={view === 'console' ? 'nav-item active' : 'nav-item'} onClick={() => setView('console')} title="Console">
+              <TerminalSquare size={16} />
+              <span>Console</span>
+            </button>
+          </section>
 
-        <section className="sidebar-status">
-          {connection ? (
-            <div className="active-profile" title={connection.name}>
-              <span className="active-dot" />
-              <span>{connection.name}</span>
-            </div>
+          <section className="sidebar-status">
+            {connection ? (
+              <div className="active-profile" title={connection.name}>
+                <span className="active-dot" />
+                <span>{connection.name}</span>
+              </div>
+            ) : null}
+            <button className="primary sidebar-connect" disabled={busy || !selectedConfig} onClick={connection ? disconnect : () => void connect()}>
+              <Plug size={16} />
+              {busy ? 'Working...' : connection ? 'Disconnect' : 'Connect'}
+            </button>
+          </section>
+          <div className="sidebar-resizer" onMouseDown={startSidebarResize} />
+        </aside>
+
+        <section className="content">
+          {view === 'browser' ? (
+            <BrowserView
+              busy={busy}
+              connection={connection}
+              expandedGroups={expandedKeyGroups}
+              keyListMode={settings.keyListMode}
+              keyTree={keyTree}
+              keys={keys}
+              keysLength={keys.length}
+              pattern={pattern}
+              preview={preview}
+              previewError={previewError}
+              previewLoading={previewLoading}
+              savingValue={savingValue}
+              savingTtl={savingTtl}
+              scanCursor={scanCursor}
+              selectedKey={selectedKey}
+              batchSelectedKeys={batchSelectedKeys}
+              ttlDraft={ttlDraft}
+              valueDraft={valueDraft}
+              valueEditError={valueEditError}
+              ttlEditError={ttlEditError}
+              onAddBatchKey={addBatchKey}
+              onClearBatchKeys={clearBatchKeys}
+              onDeleteSelected={() => void deleteSelected()}
+              onDeleteKey={(key) => void deleteKey(key)}
+              onDeleteBatchSelected={() => void deleteBatchSelected()}
+              onLoadMore={() => void loadMoreKeys()}
+              onPatternChange={setPattern}
+              onRefresh={() => void refresh()}
+              onCreateKey={(draft) => createKey(draft)}
+              onSaveValue={() => void saveSelectedValue()}
+              onSaveHashField={(field, value) => void saveHashField(field, value)}
+              onSaveTtl={() => void saveSelectedTtl()}
+              onSelectKey={(key) => void selectKey(key)}
+              onSelectBatchKeys={selectBatchKeys}
+              onToggleBatchKey={toggleBatchKey}
+              onToggleGroup={toggleKeyGroup}
+              onTtlDraftChange={setTtlDraft}
+              onValueDraftChange={setValueDraft}
+            />
           ) : null}
-          <button className="primary sidebar-connect" disabled={busy || !selectedConfig} onClick={connection ? disconnect : () => void connect()}>
-            <Plug size={16} />
-            {busy ? 'Working...' : connection ? 'Disconnect' : 'Connect'}
-          </button>
+
+          {view === 'console' ? (
+            <ConsoleView
+              command={consoleCommand}
+              connection={connection}
+              history={consoleHistory}
+              onCommandChange={setConsoleCommand}
+              onDeleteEntry={deleteConsoleEntry}
+              onRunCommand={(event) => void runConsoleCommand(event)}
+            />
+          ) : null}
+
+          {view === 'connections' && selectedConfig ? (
+            <ConnectionsView
+              busy={busy}
+              configs={configs}
+              selectedConfig={selectedConfig}
+              sshTunnel={selectedConfig.sshTunnel ?? defaultSshTunnel}
+              onAdd={addConnection}
+              onConnect={() => void connect()}
+              onConnectConfig={(config) => void connect(config)}
+              onDelete={deleteConnectionConfig}
+              onDuplicate={duplicateConnection}
+              onSave={() => void saveConnections()}
+              onSelect={selectConnectionConfig}
+              onTest={() => void testConnection()}
+              onUpdate={updateSelectedConfig}
+              onUpdateSsh={updateSshTunnel}
+              saveState={saveState}
+              testMessage={testMessage}
+              testState={testState}
+            />
+          ) : null}
+
+          <footer className="statusbar">
+            <span>{connection ? `${connection.name} · ${connection.address}` : selectedConfig ? `Selected · ${selectedConfig.name}` : 'No profile'}</span>
+            <span>{status}</span>
+          </footer>
         </section>
-        <div className="sidebar-resizer" onMouseDown={startSidebarResize} />
-      </aside>
-
-      <section className="content">
-        {view === 'browser' ? (
-          <BrowserView
-            busy={busy}
-            connection={connection}
-            expandedGroups={expandedKeyGroups}
-            keyListMode={settings.keyListMode}
-            keyTree={keyTree}
-            keys={keys}
-            keysLength={keys.length}
-            pattern={pattern}
-            preview={preview}
-            previewError={previewError}
-            previewLoading={previewLoading}
-            savingValue={savingValue}
-            savingTtl={savingTtl}
-            scanCursor={scanCursor}
-            selectedKey={selectedKey}
-            batchSelectedKeys={batchSelectedKeys}
-            ttlDraft={ttlDraft}
-            valueDraft={valueDraft}
-            valueEditError={valueEditError}
-            ttlEditError={ttlEditError}
-            onAddBatchKey={addBatchKey}
-            onClearBatchKeys={clearBatchKeys}
-            onDeleteSelected={() => void deleteSelected()}
-            onDeleteKey={(key) => void deleteKey(key)}
-            onDeleteBatchSelected={() => void deleteBatchSelected()}
-            onLoadMore={() => void loadMoreKeys()}
-            onPatternChange={setPattern}
-            onRefresh={() => void refresh()}
-            onCreateKey={(draft) => createKey(draft)}
-            onSaveValue={() => void saveSelectedValue()}
-            onSaveHashField={(field, value) => void saveHashField(field, value)}
-            onSaveTtl={() => void saveSelectedTtl()}
-            onSelectKey={(key) => void selectKey(key)}
-            onSelectBatchKeys={selectBatchKeys}
-            onToggleBatchKey={toggleBatchKey}
-            onToggleGroup={toggleKeyGroup}
-            onTtlDraftChange={setTtlDraft}
-            onValueDraftChange={setValueDraft}
-          />
-        ) : null}
-
-        {view === 'console' ? (
-          <ConsoleView
-            command={consoleCommand}
-            connection={connection}
-            history={consoleHistory}
-            onCommandChange={setConsoleCommand}
-            onDeleteEntry={deleteConsoleEntry}
-            onRunCommand={(event) => void runConsoleCommand(event)}
-          />
-        ) : null}
-
-        {view === 'connections' && selectedConfig ? (
-          <ConnectionsView
-            busy={busy}
-            configs={configs}
-            selectedConfig={selectedConfig}
-            sshTunnel={selectedConfig.sshTunnel ?? defaultSshTunnel}
-            onAdd={addConnection}
-            onConnect={() => void connect()}
-            onConnectConfig={(config) => void connect(config)}
-            onDelete={deleteConnectionConfig}
-            onDuplicate={duplicateConnection}
-            onSave={() => void saveConnections()}
-            onSelect={selectConnectionConfig}
-            onTest={() => void testConnection()}
-            onUpdate={updateSelectedConfig}
-            onUpdateSsh={updateSshTunnel}
-            saveState={saveState}
-            testMessage={testMessage}
-            testState={testState}
-          />
-        ) : null}
-
-        <footer className="statusbar">
-          <span>{connection ? `${connection.name} · ${connection.address}` : selectedConfig ? `Selected · ${selectedConfig.name}` : 'No profile'}</span>
-          <span>{status}</span>
-        </footer>
       </section>
     </main>
   );
 }
 
+function WindowTitleBar(props: { title: string; updateStatus?: UpdateStatus; onInstallUpdate?(): void }): ReactElement {
+  const updateStatus = props.updateStatus;
+  const showInstallButton = updateStatus?.status === 'downloaded' && props.onInstallUpdate;
+
+  return (
+    <header className="window-titlebar" aria-label="Window title bar">
+      <div className="window-titlebar-title">
+        <Database size={15} />
+        <span>{props.title}</span>
+      </div>
+      <div className="window-titlebar-actions">
+        {showInstallButton ? (
+          <button className="titlebar-update-button" onClick={props.onInstallUpdate} title={formatUpdateStatus(updateStatus)}>
+            <RefreshCcw size={14} />
+            安装更新
+          </button>
+        ) : null}
+      </div>
+      <div className="window-titlebar-controls" aria-hidden="true" />
+    </header>
+  );
+}
+
 function SettingsWindowView(): ReactElement {
   const platform = window.redisGui?.platform ?? 'unknown';
+  const { updateStatus, checkForUpdates, installUpdate } = useUpdateStatus();
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [settingsDraft, setSettingsDraft] = useState<AppSettings>(defaultSettings);
   const [settingsError, setSettingsError] = useState('');
@@ -963,6 +1043,7 @@ function SettingsWindowView(): ReactElement {
 
   return (
     <main className={`settings-window platform-${platform} theme-${settingsDraft.themeMode}`}>
+      <WindowTitleBar title="设置" updateStatus={updateStatus} onInstallUpdate={() => void installUpdate()} />
       <section className="settings-dialog" aria-label="设置">
         <div className="settings-layout">
           <nav className="settings-tabs" aria-label="Settings sections">
@@ -991,6 +1072,23 @@ function SettingsWindowView(): ReactElement {
                     </button>
                     <button className={settingsDraft.themeMode === 'dark' ? 'segmented active' : 'segmented'} onClick={() => updateSettingsDraft({ themeMode: 'dark' })}>
                       深色
+                    </button>
+                  </div>
+                </div>
+                <div className="settings-field update-settings-field">
+                  <span>更新</span>
+                  <div className="update-settings-control">
+                    <div className="update-settings-copy">
+                      <strong>{formatUpdateStatus(updateStatus)}</strong>
+                      <span>{formatUpdateDetail(updateStatus)}</span>
+                    </div>
+                    <button
+                      className={updateStatus.status === 'downloaded' ? 'primary compact-primary' : 'secondary compact-secondary'}
+                      disabled={updateStatus.status === 'checking' || updateStatus.status === 'downloading' || updateStatus.status === 'installing' || updateStatus.status === 'disabled'}
+                      onClick={updateStatus.status === 'downloaded' ? () => void installUpdate() : () => void checkForUpdates()}
+                    >
+                      <RefreshCcw size={14} />
+                      {updateActionLabel(updateStatus)}
                     </button>
                   </div>
                 </div>
@@ -2555,6 +2653,69 @@ function saveStateLabel(state: SaveState): string {
     case 'saved':
     default:
       return 'Saved';
+  }
+}
+
+function formatUpdateStatus(status: UpdateStatus): string {
+  switch (status.status) {
+    case 'disabled':
+      return '打包版本中可用';
+    case 'checking':
+      return '正在检查更新';
+    case 'available':
+      return `发现 ${status.availableVersion ?? '新版本'}`;
+    case 'downloading':
+      return `正在下载 ${Math.round(status.percent ?? 0)}%`;
+    case 'downloaded':
+      return `新版本 ${status.availableVersion ?? ''} 已就绪`.trim();
+    case 'not-available':
+      return '已是最新版本';
+    case 'installing':
+      return '正在安装更新';
+    case 'error':
+      return '更新检查失败';
+    case 'idle':
+    default:
+      return '尚未检查更新';
+  }
+}
+
+function formatUpdateDetail(status: UpdateStatus): string {
+  if (status.status === 'disabled') {
+    return '开发模式不会连接发布渠道。';
+  }
+  if (status.status === 'downloaded') {
+    return '点击安装后会退出应用，安装完成后自动重新打开。';
+  }
+  if (status.status === 'downloading') {
+    return status.availableVersion ? `正在后台下载 ${status.availableVersion}` : '正在后台下载更新';
+  }
+  if (status.status === 'error') {
+    return status.message ?? '请稍后重试。';
+  }
+  if (status.status === 'not-available') {
+    return `当前版本 ${status.currentVersion}`;
+  }
+  if (status.availableVersion) {
+    return `当前版本 ${status.currentVersion}，最新版本 ${status.availableVersion}`;
+  }
+  return status.message ?? `当前版本 ${status.currentVersion || '未知'}`;
+}
+
+function updateActionLabel(status: UpdateStatus): string {
+  switch (status.status) {
+    case 'downloaded':
+      return '安装并重启';
+    case 'checking':
+      return '检查中';
+    case 'downloading':
+      return '下载中';
+    case 'installing':
+      return '安装中';
+    case 'disabled':
+      return '不可用';
+    default:
+      return '检查更新';
   }
 }
 

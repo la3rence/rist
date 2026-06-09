@@ -2,6 +2,7 @@
   --theme-color: #1f2937;
   --theme-color-soft: rgba(31, 41, 55, 0.14);
   --theme-color-faint: rgba(31, 41, 55, 0.08);
+  --native-titlebar-height: 48px;
   --topbar-height: 59px;
   color: #17191c;
   background: rgba(247, 248, 250, 0.18);
@@ -34,8 +35,8 @@ textarea {
 .app-shell {
   display: grid;
   grid-template-columns: var(--sidebar-width, 236px) minmax(0, 1fr);
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
   background: rgba(247, 248, 250, 0.14);
   transition: grid-template-columns 180ms ease;
@@ -56,6 +57,98 @@ textarea {
   --window-controls-width: 150px;
 }
 
+.app-root {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: rgba(247, 248, 250, 0.14);
+}
+
+.app-root.platform-win32,
+.app-root.platform-linux,
+.settings-window.platform-win32,
+.settings-window.platform-linux {
+  grid-template-rows: var(--native-titlebar-height) minmax(0, 1fr);
+}
+
+.window-titlebar {
+  display: none;
+}
+
+.platform-win32 .window-titlebar,
+.platform-linux .window-titlebar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto var(--window-controls-width, 150px);
+  align-items: center;
+  min-width: 0;
+  height: var(--native-titlebar-height);
+  border-bottom: 1px solid rgba(210, 217, 225, 0.22);
+  background: rgba(238, 241, 244, 0.46);
+  color: #384252;
+  -webkit-app-region: drag;
+}
+
+.window-titlebar-title {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  padding: 0 18px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.window-titlebar-title svg {
+  flex: 0 0 auto;
+  color: #697586;
+}
+
+.window-titlebar-title span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.window-titlebar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  padding: 0 12px;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-update-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 0;
+  min-height: 30px;
+  border: 1px solid rgba(204, 212, 222, 0.82);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.62);
+  color: #475569;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-update-button svg {
+  flex: 0 0 auto;
+}
+
+.window-titlebar-controls {
+  width: var(--window-controls-width, 150px);
+  height: 100%;
+  -webkit-app-region: no-drag;
+}
+
 .sidebar {
   position: relative;
   display: flex;
@@ -65,8 +158,10 @@ textarea {
   background: rgba(247, 248, 250, 0.12);
   backdrop-filter: blur(96px) saturate(1.7) brightness(1.08) contrast(1.04);
   padding: 18px 14px;
+  min-width: 0;
   min-height: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   -webkit-app-region: drag;
 }
 
@@ -102,6 +197,11 @@ textarea {
 .window-drag {
   height: 14px;
   -webkit-app-region: drag;
+}
+
+.platform-win32 .window-drag,
+.platform-linux .window-drag {
+  display: none;
 }
 
 .sidebar-top-spacer {
@@ -148,6 +248,7 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-width: 0;
 }
 
 .sidebar-status {
@@ -453,10 +554,27 @@ textarea:focus {
   align-items: center;
   gap: 9px;
   height: 40px;
+  min-width: 0;
   background: transparent;
   color: #5b6572;
   padding: 0 11px;
   text-align: left;
+}
+
+.nav-item svg,
+.sidebar-connect svg {
+  flex: 0 0 auto;
+}
+
+.nav-item span,
+.sidebar-connect {
+  min-width: 0;
+}
+
+.nav-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .nav-item:hover {
@@ -557,11 +675,6 @@ textarea:focus {
   padding: 0 16px;
   min-width: 0;
   -webkit-app-region: drag;
-}
-
-.platform-win32 .toolbar,
-.platform-linux .toolbar {
-  padding-right: calc(16px + var(--window-controls-width, 150px));
 }
 
 .page-toolbar {
@@ -1789,6 +1902,11 @@ textarea:focus {
   -webkit-app-region: drag;
 }
 
+.platform-win32 .settings-layout,
+.platform-linux .settings-layout {
+  padding-top: 0;
+}
+
 .settings-tabs {
   display: grid;
   align-content: start;
@@ -1856,6 +1974,41 @@ textarea:focus {
 .settings-field > span {
   min-width: 0;
   text-align: right;
+}
+
+.update-settings-field {
+  align-items: start;
+}
+
+.update-settings-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  text-align: left;
+}
+
+.update-settings-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: #687385;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-transform: none;
+}
+
+.update-settings-copy strong {
+  color: #1d2228;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.update-settings-copy span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .settings-segmented {
@@ -2081,6 +2234,10 @@ textarea:focus {
     padding: 0 10px;
   }
 
+  .update-settings-control {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .save-action {
     justify-content: flex-start;
   }
@@ -2100,8 +2257,23 @@ textarea:focus {
     background: rgba(12, 15, 20, 0.2);
   }
 
+  .app-root {
+    background: rgba(12, 15, 20, 0.16);
+  }
+
   .app-shell {
     background: rgba(12, 15, 20, 0.16);
+  }
+
+  .platform-win32 .window-titlebar,
+  .platform-linux .window-titlebar {
+    border-bottom-color: rgba(226, 232, 240, 0.08);
+    background: rgba(14, 18, 24, 0.72);
+    color: #d6dee9;
+  }
+
+  .window-titlebar-title svg {
+    color: #9ba8b8;
   }
 
   .sidebar {
@@ -2185,6 +2357,14 @@ textarea:focus {
     color: #9ba8b8;
   }
 
+  .update-settings-copy {
+    color: #9ba8b8;
+  }
+
+  .update-settings-copy strong {
+    color: #e7edf5;
+  }
+
   .settings-segmented,
   .connection-segmented {
     border-color: rgba(226, 232, 240, 0.16);
@@ -2205,6 +2385,7 @@ textarea:focus {
     .search,
     .list-mode-toggle,
     .icon-button,
+    .titlebar-update-button,
     .compact-primary,
     .sidebar-connect,
     .secondary,

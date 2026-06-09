@@ -40,6 +40,19 @@ export type AppSettings = {
   themeMode: 'system' | 'light' | 'dark';
 };
 
+export type UpdateStatusKind = 'idle' | 'disabled' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'installing' | 'error';
+
+export type UpdateStatus = {
+  status: UpdateStatusKind;
+  currentVersion: string;
+  availableVersion?: string;
+  percent?: number;
+  message?: string;
+  checkedAt?: string;
+  releaseName?: string;
+  releaseDate?: string;
+};
+
 export type ConnectionSummary = {
   id: string;
   name: string;
@@ -109,6 +122,10 @@ export type ConsoleCommandResult = {
 export type RedisGuiApi = {
   platform: string;
   openSettings(): Promise<void>;
+  getUpdateStatus(): Promise<UpdateStatus>;
+  checkForUpdates(): Promise<UpdateStatus>;
+  installUpdate(): Promise<UpdateStatus>;
+  onUpdateStatusChanged(listener: (status: UpdateStatus) => void): () => void;
   loadConnections(): Promise<SavedConnections | undefined>;
   saveConnections(config: SavedConnections): Promise<void>;
   loadSettings(): Promise<AppSettings>;

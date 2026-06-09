@@ -1,11 +1,15 @@
 import { BrowserWindow, ipcMain, nativeTheme } from 'electron';
 import { ConfigStore } from './config-store';
 import { RedisService } from './redis-service';
+import { updateService } from './update-service';
 
 export function registerIpc(): void {
   const configStore = new ConfigStore();
   const redis = new RedisService();
 
+  ipcMain.handle('updates:getStatus', () => updateService.getStatus());
+  ipcMain.handle('updates:check', () => updateService.checkForUpdates());
+  ipcMain.handle('updates:install', () => updateService.installDownloadedUpdate());
   ipcMain.handle('config:loadConnections', () => configStore.loadConnections());
   ipcMain.handle('config:saveConnections', (_event, config) => configStore.saveConnections(config));
   ipcMain.handle('config:loadSettings', async () => {

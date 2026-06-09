@@ -27,13 +27,19 @@ jobs:
             script: dist:mac
             artifacts: |
               release/*.dmg
+              release/*.dmg.blockmap
               release/*-mac.zip
+              release/*-mac.zip.blockmap
+              release/latest-mac.yml
           - platform: Windows
             os: windows-latest
             script: dist:win
             artifacts: |
               release/*.exe
+              release/*.exe.blockmap
               release/*.zip
+              release/*.zip.blockmap
+              release/latest.yml
 
     env:
       ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/

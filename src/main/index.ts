@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, nativeTheme } from 'electron';
 import { join } from 'node:path';
 import { is } from '@electron-toolkit/utils';
 import { registerIpc } from './ipc';
+import { updateService } from './update-service';
 
 registerIpc();
 
@@ -119,9 +120,13 @@ ipcMain.handle('app:openSettings', () => {
   openSettingsWindow();
 });
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  createWindow();
+  updateService.start();
+});
 
 app.on('window-all-closed', () => {
+  updateService.stop();
   if (process.platform !== 'darwin') {
     app.quit();
   }

@@ -14,7 +14,9 @@
     "build": "electron-vite build",
     "pack:mac": "uv run --managed-python --no-project electron-builder --mac --publish=never",
     "dist:mac": "pnpm build && pnpm pack:mac",
+    "publish:mac": "pnpm build && uv run --managed-python --no-project electron-builder --mac --publish=always",
     "dist:win": "pnpm build && electron-builder --win --publish=never",
+    "publish:win": "pnpm build && electron-builder --win --publish=always",
     "preview": "electron-vite preview"
   },
   "build": {
@@ -24,6 +26,14 @@
     "directories": {
       "output": "release"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "la3rence",
+        "repo": "rist",
+        "releaseType": "release"
+      }
+    ],
     "files": [
       "out/**/*",
       "package.json"
@@ -57,6 +67,7 @@
   },
   "dependencies": {
     "@electron-toolkit/utils": "^4.0.0",
+    "electron-updater": "^6.8.9",
     "ioredis": "^5.11.1",
     "lucide-react": "^1.17.0",
     "react": "^19.2.7",
