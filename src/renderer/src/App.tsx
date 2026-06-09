@@ -775,6 +775,10 @@ function MainApp(): ReactElement {
         <div className="sidebar-top-spacer" />
 
         <section className="nav-list">
+          <button className={view === 'connections' ? 'nav-item active' : 'nav-item'} onClick={() => setView('connections')} title="Connections">
+            <Settings2 size={16} />
+            <span>Connections</span>
+          </button>
           <button className={view === 'browser' ? 'nav-item active' : 'nav-item'} onClick={() => setView('browser')} title="Browser">
             <Server size={16} />
             <span>Browser</span>
@@ -782,10 +786,6 @@ function MainApp(): ReactElement {
           <button className={view === 'console' ? 'nav-item active' : 'nav-item'} onClick={() => setView('console')} title="Console">
             <TerminalSquare size={16} />
             <span>Console</span>
-          </button>
-          <button className={view === 'connections' ? 'nav-item active' : 'nav-item'} onClick={() => setView('connections')} title="Connections">
-            <Settings2 size={16} />
-            <span>Connections</span>
           </button>
         </section>
 
@@ -980,25 +980,27 @@ function SettingsWindowView(): ReactElement {
             <h2>{tabLabel}</h2>
             {activeTab === 'general' ? (
               <div className="settings-section">
-                <div className="section-title">主题</div>
-                <div className="settings-segmented theme-mode-control" role="group" aria-label="主题">
-                  <button className={settingsDraft.themeMode === 'system' ? 'segmented active' : 'segmented'} onClick={() => updateSettingsDraft({ themeMode: 'system' })}>
-                    跟随系统
-                  </button>
-                  <button className={settingsDraft.themeMode === 'light' ? 'segmented active' : 'segmented'} onClick={() => updateSettingsDraft({ themeMode: 'light' })}>
-                    浅色
-                  </button>
-                  <button className={settingsDraft.themeMode === 'dark' ? 'segmented active' : 'segmented'} onClick={() => updateSettingsDraft({ themeMode: 'dark' })}>
-                    深色
-                  </button>
+                <div className="settings-field">
+                  <span>主题</span>
+                  <div className="settings-segmented theme-mode-control" role="group" aria-label="主题">
+                    <button className={settingsDraft.themeMode === 'system' ? 'segmented active' : 'segmented'} onClick={() => updateSettingsDraft({ themeMode: 'system' })}>
+                      跟随系统
+                    </button>
+                    <button className={settingsDraft.themeMode === 'light' ? 'segmented active' : 'segmented'} onClick={() => updateSettingsDraft({ themeMode: 'light' })}>
+                      浅色
+                    </button>
+                    <button className={settingsDraft.themeMode === 'dark' ? 'segmented active' : 'segmented'} onClick={() => updateSettingsDraft({ themeMode: 'dark' })}>
+                      深色
+                    </button>
+                  </div>
                 </div>
               </div>
             ) : null}
             {activeTab === 'query' ? (
               <div className="settings-section">
                 <div className="section-title">Key Browser</div>
-                <label>
-                  Key 折叠模式
+                <div className="settings-field">
+                  <span>Key 折叠模式</span>
                   <div className="settings-segmented" role="group" aria-label="Key 折叠模式">
                     <button className={settingsDraft.keyListMode === 'raw' ? 'segmented active' : 'segmented'} onClick={() => updateSettingsDraft({ keyListMode: 'raw' })}>
                       Raw
@@ -1007,7 +1009,7 @@ function SettingsWindowView(): ReactElement {
                       Prefix
                     </button>
                   </div>
-                </label>
+                </div>
                 <label>
                   每次游标扫描最大 Count
                   <input
@@ -2044,13 +2046,16 @@ function ConnectionsView(props: {
                 ))}
               </div>
             </div>
-            <div className="row compact">
-              <button className={props.selectedConfig.mode === 'single' ? 'segmented active' : 'segmented'} onClick={() => props.onUpdate({ mode: 'single' })}>
-                Single
-              </button>
-              <button className={props.selectedConfig.mode === 'cluster' ? 'segmented active' : 'segmented'} onClick={() => props.onUpdate({ mode: 'cluster' })}>
-                Cluster
-              </button>
+            <div className="form-field">
+              <span>Mode</span>
+              <div className="connection-segmented">
+                <button className={props.selectedConfig.mode === 'single' ? 'segmented active' : 'segmented'} onClick={() => props.onUpdate({ mode: 'single' })}>
+                  Single
+                </button>
+                <button className={props.selectedConfig.mode === 'cluster' ? 'segmented active' : 'segmented'} onClick={() => props.onUpdate({ mode: 'cluster' })}>
+                  Cluster
+                </button>
+              </div>
             </div>
             <div className="endpoints-section">
               <div className="section-heading">
@@ -2102,9 +2107,9 @@ function ConnectionsView(props: {
                 onChange={(event) => props.onUpdate({ password: event.target.value || undefined })}
               />
             </label>
-            <label className="switch">
+            <label className="switch field-switch">
+              <span>TLS</span>
               <input type="checkbox" checked={props.selectedConfig.tls ?? false} onChange={(event) => props.onUpdate({ tls: event.target.checked })} />
-              TLS
             </label>
 
             <div className="access-section">
