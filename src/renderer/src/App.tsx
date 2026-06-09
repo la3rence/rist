@@ -1078,13 +1078,16 @@ function BrowserView(props: {
   const [batchDragging, setBatchDragging] = useState(false);
   const [keyPaneWidth, setKeyPaneWidth] = useState(360);
   const [creatingKey, setCreatingKey] = useState(false);
+  const [hashAddingField, setHashAddingField] = useState(false);
   const [newKeyDraft, setNewKeyDraft] = useState<NewKeyDraft>(createEmptyNewKeyDraft);
   const [newKeyError, setNewKeyError] = useState('');
   const batchMode = props.batchSelectedKeys.size > 0;
+  const isHashPreview = props.preview?.type === 'hash';
 
   useEffect(() => {
     setValueEditing(false);
     setTtlEditing(false);
+    setHashAddingField(false);
   }, [props.preview?.key]);
 
   useEffect(() => {
@@ -1458,14 +1461,19 @@ function BrowserView(props: {
                       ) : null}
                     </>
                   ) : null}
+                  {isHashPreview && !valueEditing ? (
+                    <button className={hashAddingField ? 'icon-button active' : 'icon-button'} disabled={props.savingValue} onClick={() => setHashAddingField((value) => !value)} title="Add hash field">
+                      {hashAddingField ? <X size={15} /> : <Plus size={15} />}
+                    </button>
+                  ) : null}
                   <button className="icon-button danger" onClick={props.onDeleteSelected} title="Delete selected key">
                     <Trash2 size={16} />
                   </button>
                 </div>
               </div>
               {props.ttlEditError ? <div className="header-edit-error">{props.ttlEditError}</div> : null}
-              <div className="preview-body">
-                <section className={valueEditing ? 'value-card editing' : 'value-card'}>
+              <div className={!valueEditing && isHashPreview ? 'preview-body hash-preview-body' : 'preview-body'}>
+                <section className={`${valueEditing ? 'value-card editing' : 'value-card'}${!valueEditing && isHashPreview ? ' hash-value-card' : ''}`}>
                   {valueEditing ? (
                     <textarea
                       className="value-editor-input"
@@ -1476,7 +1484,9 @@ function BrowserView(props: {
                   ) : (
                     <ValuePreviewContent
                       preview={props.preview}
+                      addingField={hashAddingField}
                       savingValue={props.savingValue}
+                      onAddingFieldChange={setHashAddingField}
                       onSaveHashField={props.onSaveHashField}
                     />
                   )}
@@ -1498,11 +1508,21 @@ function BrowserView(props: {
 
 function ValuePreviewContent(props: {
   preview: KeyPreview;
+  addingField: boolean;
   savingValue: boolean;
+  onAddingFieldChange(addingField: boolean): void;
   onSaveHashField(field: string, value: string): void;
 }): ReactElement {
   if (props.preview.type === 'hash') {
-    return <HashPreviewTable preview={props.preview} savingValue={props.savingValue} onSaveHashField={props.onSaveHashField} />;
+    return (
+      <HashPreviewTable
+        preview={props.preview}
+        addingField={props.addingField}
+        savingValue={props.savingValue}
+        onAddingFieldChange={props.onAddingFieldChange}
+        onSaveHashField={props.onSaveHashField}
+      />
+    );
   }
 
   return <pre className="value-preview">{formatPreviewValue(props.preview.type, props.preview.value)}</pre>;
@@ -1510,13 +1530,14 @@ function ValuePreviewContent(props: {
 
 function HashPreviewTable(props: {
   preview: KeyPreview;
+  addingField: boolean;
   savingValue: boolean;
+  onAddingFieldChange(addingField: boolean): void;
   onSaveHashField(field: string, value: string): void;
 }): ReactElement {
   const entries = getHashEntries(props.preview.value);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [fieldDraft, setFieldDraft] = useState('');
-  const [addingField, setAddingField] = useState(false);
   const [newFieldDraft, setNewFieldDraft] = useState('');
   const [newValueDraft, setNewValueDraft] = useState('');
   const [newFieldError, setNewFieldError] = useState('');
@@ -1525,7 +1546,6 @@ function HashPreviewTable(props: {
   useEffect(() => {
     setEditingField(null);
     setFieldDraft('');
-    setAddingField(false);
     setNewFieldDraft('');
     setNewValueDraft('');
     setNewFieldError('');
@@ -1583,19 +1603,14 @@ function HashPreviewTable(props: {
     }
     setNewFieldError('');
     props.onSaveHashField(field, newValueDraft);
-    setAddingField(false);
+    props.onAddingFieldChange(false);
     setNewFieldDraft('');
     setNewValueDraft('');
   }
 
   return (
     <div className="hash-preview">
-      <div className="hash-actions">
-        <button className={addingField ? 'icon-button active' : 'icon-button'} disabled={props.savingValue} onClick={() => setAddingField((value) => !value)} title="Add hash field">
-          {addingField ? <X size={15} /> : <Plus size={15} />}
-        </button>
-      </div>
-      {addingField ? (
+      {props.addingField ? (
         <form className="hash-add-form" onSubmit={submitNewField}>
           <input
             autoFocus
