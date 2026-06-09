@@ -16,6 +16,19 @@ function titleBarOverlayOptions(): Electron.TitleBarOverlay {
   };
 }
 
+function windowBackgroundColor(): string {
+  return process.platform === 'win32' ? (nativeTheme.shouldUseDarkColors ? '#0c0f14' : '#f7f8fa') : '#00000000';
+}
+
+function syncNativeWindowAppearance(): void {
+  BrowserWindow.getAllWindows().forEach((window) => {
+    if (!window.isDestroyed()) {
+      window.setBackgroundColor(windowBackgroundColor());
+      window.setTitleBarOverlay(titleBarOverlayOptions());
+    }
+  });
+}
+
 function loadRenderer(window: BrowserWindow, windowName?: string): void {
   if (is.dev && process.env.ELECTRON_RENDERER_URL) {
     const url = new URL(process.env.ELECTRON_RENDERER_URL);
@@ -38,12 +51,12 @@ function createWindow(): void {
     minWidth: 640,
     minHeight: 680,
     title: 'Rist',
-    backgroundColor: '#00000000',
+    backgroundColor: windowBackgroundColor(),
     titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
     ...(isMac ? { trafficLightPosition: { x: 20, y: 20 } } : { titleBarOverlay: titleBarOverlayOptions() }),
-    transparent: true,
+    transparent: isMac,
     ...(isMac ? { vibrancy: 'under-window' as const, visualEffectState: 'active' as const } : {}),
-    ...(isWindows ? { backgroundMaterial: 'acrylic' as const } : {}),
+    ...(isWindows ? { backgroundMaterial: 'none' as const } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.mjs'),
       sandbox: false,
@@ -57,13 +70,7 @@ function createWindow(): void {
   });
 
   if (!isMac) {
-    nativeTheme.on('updated', () => {
-      BrowserWindow.getAllWindows().forEach((window) => {
-        if (!window.isDestroyed()) {
-          window.setTitleBarOverlay(titleBarOverlayOptions());
-        }
-      });
-    });
+    nativeTheme.on('updated', syncNativeWindowAppearance);
   }
 
   loadRenderer(mainWindow);
@@ -87,12 +94,12 @@ function openSettingsWindow(): void {
     minHeight: 380,
     title: '设置',
     parent: mainWindow ?? undefined,
-    backgroundColor: '#00000000',
+    backgroundColor: windowBackgroundColor(),
     titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
     ...(isMac ? { trafficLightPosition: { x: 18, y: 18 } } : { titleBarOverlay: titleBarOverlayOptions() }),
-    transparent: true,
+    transparent: isMac,
     ...(isMac ? { vibrancy: 'under-window' as const, visualEffectState: 'active' as const } : {}),
-    ...(isWindows ? { backgroundMaterial: 'acrylic' as const } : {}),
+    ...(isWindows ? { backgroundMaterial: 'none' as const } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.mjs'),
       sandbox: false,
