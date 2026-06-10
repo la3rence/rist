@@ -1,10 +1,20 @@
+import { execFile } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import { app, BrowserWindow } from 'electron';
 import electronUpdater from 'electron-updater';
 import type { ProgressInfo, UpdateDownloadedEvent, UpdateInfo } from 'electron-updater';
 import type { UpdateStatus } from '../shared/types';
 
 const updateCheckIntervalMs = 4 * 60 * 60 * 1000;
+const macShipItCacheNames = ['app.rist.desktop.ShipIt', `${app.getName()}.ShipIt`];
+const quarantineValidationErrorPattern = /code signature at URL .* did not pass validation/i;
+const quarantineResourceErrorPattern = /code has\s+no resources but signature indicates they must be present/i;
+const shipItUpdateAppUrlPattern = /file:\/\/\S+?\.app\/?/i;
 const { autoUpdater } = electronUpdater;
+const execFileAsync = promisify(execFile);
 
 class UpdateService {
   private state: UpdateStatus = {
@@ -14,6 +24,8 @@ class UpdateService {
 
   private started = false;
   private checkTimer: NodeJS.Timeout | null = null;
+  private quarantineRetryInProgress = false;
+  private retriedQuarantinePaths = new Set<string>();
 
   start(): void {
     if (this.started) return;
@@ -83,6 +95,7 @@ class UpdateService {
         percent: undefined,
         message: error.message || 'Unable to check for updates'
       });
+      void this.recoverFromQuarantineValidationError(error);
     });
 
     if (!app.isPackaged) {
@@ -162,6 +175,77 @@ class UpdateService {
       checkedAt: new Date().toISOString()
     };
     this.broadcast();
+  }
+
+  private async recoverFromQuarantineValidationError(error: Error): Promise<void> {
+    const appPath = this.getQuarantinedShipItAppPath(error);
+    if (!appPath || this.quarantineRetryInProgress || this.retriedQuarantinePaths.has(appPath)) {
+      return;
+    }
+
+    this.quarantineRetryInProgress = true;
+    this.retriedQuarantinePaths.add(appPath);
+
+    try {
+      this.setState({
+        status: 'checking',
+        percent: undefined,
+        message: 'Repairing downloaded update quarantine attributes.'
+      });
+      await execFileAsync('/usr/bin/xattr', ['-dr', 'com.apple.quarantine', appPath]);
+      this.setState({
+        status: 'checking',
+        percent: undefined,
+        message: 'Retrying update check after quarantine repair.'
+      });
+      await autoUpdater.checkForUpdates();
+    } catch (repairError) {
+      this.setState({
+        status: 'error',
+        percent: undefined,
+        message: repairError instanceof Error ? repairError.message : error.message || 'Unable to check for updates'
+      });
+    } finally {
+      this.quarantineRetryInProgress = false;
+    }
+  }
+
+  private getQuarantinedShipItAppPath(error: Error): string | null {
+    if (process.platform !== 'darwin') return null;
+    if (!app.isPackaged) return null;
+
+    const message = error.message || '';
+    if (!quarantineValidationErrorPattern.test(message) || !quarantineResourceErrorPattern.test(message)) {
+      return null;
+    }
+
+    const urlMatch = message.match(shipItUpdateAppUrlPattern);
+    if (!urlMatch) return null;
+
+    let updateAppPath: string;
+    try {
+      updateAppPath = path.resolve(fileURLToPath(urlMatch[0]));
+    } catch {
+      return null;
+    }
+
+    const cacheRootPath = path.resolve(app.getPath('home'), 'Library', 'Caches');
+    const knownCacheRoots = macShipItCacheNames.map((cacheName) => path.join(cacheRootPath, cacheName));
+
+    if (!knownCacheRoots.some((root) => this.isPathInside(updateAppPath, root))) {
+      return null;
+    }
+
+    if (path.basename(updateAppPath) !== `${app.getName()}.app` || !existsSync(updateAppPath)) {
+      return null;
+    }
+
+    return updateAppPath;
+  }
+
+  private isPathInside(targetPath: string, rootPath: string): boolean {
+    const relativePath = path.relative(rootPath, targetPath);
+    return Boolean(relativePath) && !relativePath.startsWith('..') && !path.isAbsolute(relativePath);
   }
 
   private broadcast(): void {
