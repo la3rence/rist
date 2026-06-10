@@ -38,6 +38,7 @@ export type AppSettings = {
   keyListMode: 'raw' | 'tree';
   keyScanCount: number;
   themeMode: 'system' | 'light' | 'dark';
+  language: 'zh-CN' | 'en';
 };
 
 export type UpdateStatusKind = 'idle' | 'disabled' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'installing' | 'error';

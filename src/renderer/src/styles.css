@@ -1119,6 +1119,12 @@ textarea:focus {
   justify-content: flex-end;
 }
 
+.save-action .primary.compact-primary {
+  border-color: rgba(204, 212, 222, 0.82);
+  background: rgba(255, 255, 255, 0.62);
+  color: #475569;
+}
+
 .test-result {
   min-width: 0;
   overflow-wrap: anywhere;
@@ -2303,6 +2309,12 @@ textarea:focus {
   }
 
   .page-toolbar .primary.compact-primary {
+    border-color: rgba(226, 232, 240, 0.16);
+    background: rgba(0, 0, 0, 0.14);
+    color: #e7edf5;
+  }
+
+  .save-action .primary.compact-primary {
     border-color: rgba(226, 232, 240, 0.16);
     background: rgba(0, 0, 0, 0.14);
     color: #e7edf5;

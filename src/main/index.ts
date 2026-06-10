@@ -1,10 +1,21 @@
-import { app, BrowserWindow, ipcMain, nativeTheme } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, nativeTheme } from 'electron';
+import type { MenuItemConstructorOptions } from 'electron';
 import { join } from 'node:path';
 import { is } from '@electron-toolkit/utils';
 import { registerIpc } from './ipc';
 import { updateService } from './update-service';
+import { ConfigStore } from './config-store';
+import { defaultLanguage, normalizeLanguage, translate } from '../shared/i18n';
+import type { AppLanguage, TranslationKey } from '../shared/i18n';
 
-registerIpc();
+let appLanguage: AppLanguage = defaultLanguage;
+
+registerIpc((settings) => {
+  createApplicationMenu(settings.language);
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.setTitle(translate(appLanguage, 'settings'));
+  }
+});
 
 let mainWindow: BrowserWindow | null = null;
 let settingsWindow: BrowserWindow | null = null;
@@ -93,7 +104,7 @@ function openSettingsWindow(): void {
     height: 520,
     minWidth: 520,
     minHeight: 380,
-    title: '设置',
+    title: translate(appLanguage, 'settings'),
     parent: mainWindow ?? undefined,
     backgroundColor: windowBackgroundColor(),
     titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
@@ -116,11 +127,84 @@ function openSettingsWindow(): void {
   loadRenderer(settingsWindow, 'settings');
 }
 
+function createApplicationMenu(language: AppLanguage = appLanguage): void {
+  appLanguage = normalizeLanguage(language);
+  const t = (key: TranslationKey): string => translate(appLanguage, key);
+  const isMac = process.platform === 'darwin';
+  const settingsMenuItem: MenuItemConstructorOptions = {
+    label: t('settings'),
+    accelerator: 'CmdOrCtrl+,',
+    click: () => openSettingsWindow()
+  };
+
+  const template: MenuItemConstructorOptions[] = [
+    ...(isMac
+      ? [
+          {
+            label: app.name,
+            submenu: [
+              { role: 'about' },
+              { type: 'separator' },
+              settingsMenuItem,
+              { type: 'separator' },
+              { role: 'services' },
+              { type: 'separator' },
+              { role: 'hide' },
+              { role: 'hideOthers' },
+              { role: 'unhide' },
+              { type: 'separator' },
+              { role: 'quit' }
+            ]
+          } satisfies MenuItemConstructorOptions
+        ]
+      : [
+          {
+            label: t('file'),
+            submenu: [settingsMenuItem, { type: 'separator' }, { role: 'quit' }]
+          } satisfies MenuItemConstructorOptions
+        ]),
+    {
+      label: t('edit'),
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        ...(isMac ? ([{ role: 'pasteAndMatchStyle' }, { role: 'delete' }, { role: 'selectAll' }] as MenuItemConstructorOptions[]) : ([{ role: 'delete' }, { type: 'separator' }, { role: 'selectAll' }] as MenuItemConstructorOptions[]))
+      ]
+    },
+    {
+      label: t('view'),
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
+      ]
+    },
+    {
+      label: t('window'),
+      submenu: isMac ? [{ role: 'minimize' }, { role: 'zoom' }, { type: 'separator' }, { role: 'front' }] : [{ role: 'minimize' }, { role: 'close' }]
+    }
+  ];
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 ipcMain.handle('app:openSettings', () => {
   openSettingsWindow();
 });
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  const settings = await new ConfigStore().loadSettings().catch(() => undefined);
+  createApplicationMenu(settings?.language ?? defaultLanguage);
   createWindow();
   updateService.start();
 });

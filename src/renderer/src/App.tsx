@@ -1,11 +1,13 @@
 import {
   CSSProperties,
+  createContext,
   FormEvent,
   KeyboardEvent as ReactKeyboardEvent,
   MouseEvent,
   PointerEvent as ReactPointerEvent,
   ReactElement,
   WheelEvent as ReactWheelEvent,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -35,6 +37,8 @@ import {
   X
 } from 'lucide-react';
 import type { AppSettings, ConnectionSummary, KeyPreview, KeySummary, RedisConnectionConfig, SavedConnections, ScanKeysResult, SetKeyRequest, SshTunnelConfig, UpdateStatus } from '../../shared/types';
+import { defaultLanguage, normalizeLanguage, translate } from '../../shared/i18n';
+import type { AppLanguage, TranslationKey, TranslationParams } from '../../shared/i18n';
 
 type View = 'browser' | 'console' | 'connections';
 type SaveState = 'saved' | 'dirty' | 'saving' | 'error';
@@ -58,6 +62,25 @@ type ConsoleEntry = {
   error?: string;
 };
 
+type TFunction = (key: TranslationKey, params?: TranslationParams) => string;
+
+const I18nContext = createContext<{ language: AppLanguage; t: TFunction }>({
+  language: defaultLanguage,
+  t: (key, params) => translate(defaultLanguage, key, params)
+});
+
+function useI18n(): { language: AppLanguage; t: TFunction } {
+  return useContext(I18nContext);
+}
+
+function createI18n(language: AppLanguage): { language: AppLanguage; t: TFunction } {
+  const normalizedLanguage = normalizeLanguage(language);
+  return {
+    language: normalizedLanguage,
+    t: (key, params) => translate(normalizedLanguage, key, params)
+  };
+}
+
 type KeyTreeNode = {
   id: string;
   label: string;
@@ -67,7 +90,7 @@ type KeyTreeNode = {
 
 const defaultSshTunnel: SshTunnelConfig = { enabled: false, host: '', port: 22, username: '' };
 const connectionColors = ['#ef4444', '#f97316', '#f59e0b', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#64748b'];
-const defaultSettings: AppSettings = { keyListMode: 'raw', keyScanCount: 1000, themeMode: 'system' };
+const defaultSettings: AppSettings = { keyListMode: 'raw', keyScanCount: 1000, themeMode: 'system', language: defaultLanguage };
 const defaultUpdateStatus: UpdateStatus = { status: 'idle', currentVersion: '' };
 const collapsedSidebarWidth = 88;
 const collapseThreshold = 128;
@@ -116,7 +139,7 @@ function useUpdateStatus(): {
           setUpdateStatus({
             ...defaultUpdateStatus,
             status: 'error',
-            message: error instanceof Error ? error.message : 'Unable to load update status'
+            message: error instanceof Error ? error.message : translate(defaultSettings.language, 'unableToLoadUpdateStatus')
           });
         }
       });
@@ -167,8 +190,10 @@ function MainApp(): ReactElement {
   const [pattern, setPattern] = useState('*');
   const [scanCursor, setScanCursor] = useState('0');
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
+  const i18n = useMemo(() => createI18n(settings.language), [settings.language]);
+  const { t } = i18n;
   const [expandedKeyGroups, setExpandedKeyGroups] = useState<Set<string>>(() => new Set());
-  const [status, setStatus] = useState('Ready');
+  const [status, setStatus] = useState(() => translate(defaultSettings.language, 'ready'));
   const [busy, setBusy] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('saved');
   const [testState, setTestState] = useState<TestState>('idle');
@@ -182,6 +207,10 @@ function MainApp(): ReactElement {
   const keyTree = useMemo(() => buildKeyTree(keys), [keys]);
 
   useEffect(() => {
+    document.documentElement.lang = settings.language === 'en' ? 'en' : 'zh-CN';
+  }, [settings.language]);
+
+  useEffect(() => {
     let cancelled = false;
 
     async function loadConnections(): Promise<void> {
@@ -191,12 +220,12 @@ function MainApp(): ReactElement {
           const normalized = normalizeSavedConnections(saved);
           setConfigs(normalized.connections);
           setSelectedConfigId(normalized.selectedId ?? normalized.connections[0]?.id ?? '');
-          setStatus('Loaded saved connections');
+          setStatus(t('loadedSavedConnections'));
           setSaveState('saved');
         }
       } catch (error) {
         if (!cancelled) {
-          setStatus(error instanceof Error ? error.message : 'Unable to load saved connections');
+          setStatus(error instanceof Error ? error.message : t('unableToLoadSavedConnections'));
           setSaveState('error');
         }
       }
@@ -220,7 +249,7 @@ function MainApp(): ReactElement {
         }
       } catch (error) {
         if (!cancelled) {
-          setStatus(error instanceof Error ? error.message : 'Unable to load settings');
+          setStatus(error instanceof Error ? error.message : translate(defaultSettings.language, 'unableToLoadSettings'));
         }
       }
     }
@@ -304,7 +333,7 @@ function MainApp(): ReactElement {
 
   function deleteConnectionConfig(): void {
     if (!selectedConfig || configs.length === 1) return;
-    const confirmed = window.confirm(`Delete connection "${selectedConfig.name}"?`);
+    const confirmed = window.confirm(t('deleteConnectionConfirm', { name: selectedConfig.name }));
     if (!confirmed) return;
 
     const remaining = configs.filter((item) => item.id !== selectedConfig.id);
@@ -324,10 +353,10 @@ function MainApp(): ReactElement {
     try {
       await getRedisGuiApi().saveConnections({ selectedId: selectedConfigId, connections: configs });
       setSaveState('saved');
-      setStatus('Connections saved');
+      setStatus(t('connectionsSaved'));
     } catch (error) {
       setSaveState('error');
-      setStatus(error instanceof Error ? error.message : 'Unable to save connections');
+      setStatus(error instanceof Error ? error.message : t('unableToSaveConnections'));
     }
   }
 
@@ -337,7 +366,7 @@ function MainApp(): ReactElement {
       setSelectedConfigId(config.id);
     }
     setBusy(true);
-    setStatus('Connecting to Redis...');
+    setStatus(t('connectingToRedis'));
     const previousConnection = connection;
     clearActiveConnectionState();
     try {
@@ -347,7 +376,7 @@ function MainApp(): ReactElement {
       }
       const summary = await api.connect(config);
       setConnection(summary);
-      setStatus(`Connected to ${summary.name}`);
+      setStatus(t('connectedTo', { name: summary.name }));
       setView('browser');
       const result = await scanKeysWithPattern(summary.id, pattern);
       if (!result) return;
@@ -355,7 +384,7 @@ function MainApp(): ReactElement {
       setBatchSelectedKeys(new Set());
       setScanCursor(result.cursor);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Connection failed');
+      setStatus(error instanceof Error ? error.message : t('connectionFailed'));
     } finally {
       setBusy(false);
     }
@@ -364,16 +393,16 @@ function MainApp(): ReactElement {
   async function testConnection(config = selectedConfig): Promise<void> {
     if (!config) return;
     setTestState('testing');
-    setTestMessage('Testing connection...');
-    setStatus('Testing connection...');
+    setTestMessage(t('testingConnection'));
+    setStatus(t('testingConnection'));
     try {
       const summary = await getRedisGuiApi().testConnection(config);
       const detail = summary.redisVersion ? `Redis ${summary.redisVersion}` : summary.address;
       setTestState('success');
-      setTestMessage(`Test passed · ${detail}`);
-      setStatus(`Test passed: ${summary.name}`);
+      setTestMessage(t('testPassedWithDetail', { detail }));
+      setStatus(t('testPassedStatus', { name: summary.name }));
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Test failed';
+      const message = error instanceof Error ? error.message : t('testFailed');
       setTestState('error');
       setTestMessage(message);
       setStatus(message);
@@ -387,9 +416,9 @@ function MainApp(): ReactElement {
     clearActiveConnectionState();
     try {
       await getRedisGuiApi().disconnect(previousConnection.id);
-      setStatus('Disconnected');
+      setStatus(t('disconnected'));
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Disconnect failed');
+      setStatus(error instanceof Error ? error.message : t('disconnectFailed'));
     } finally {
       setBusy(false);
     }
@@ -407,9 +436,9 @@ function MainApp(): ReactElement {
       if (selectedKey) {
         await refreshSelectedPreview(connection.id, selectedKey);
       }
-      setStatus(`Loaded ${result.keys.length} keys`);
+      setStatus(t('loadedKeys', { count: result.keys.length }));
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Scan failed');
+      setStatus(error instanceof Error ? error.message : t('scanFailed'));
     } finally {
       setBusy(false);
     }
@@ -430,10 +459,10 @@ function MainApp(): ReactElement {
         setTtlDraft('');
         setValueEditError('');
       }
-      setStatus(`Loaded ${result.keys.length} keys`);
+      setStatus(t('loadedKeys', { count: result.keys.length }));
     } catch (error) {
       if (requestId !== scanRequestRef.current) return;
-      setStatus(error instanceof Error ? error.message : 'Scan failed');
+      setStatus(error instanceof Error ? error.message : t('scanFailed'));
     }
   }
 
@@ -445,9 +474,9 @@ function MainApp(): ReactElement {
       if (!result) return;
       setKeys((items) => sortKeySummaries(mergeKeySummaries(items, result.keys)));
       setScanCursor(result.cursor);
-      setStatus(`Loaded ${result.keys.length} more keys`);
+      setStatus(t('loadedMoreKeys', { count: result.keys.length }));
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Scan failed');
+      setStatus(error instanceof Error ? error.message : t('scanFailed'));
     } finally {
       setBusy(false);
     }
@@ -514,13 +543,13 @@ function MainApp(): ReactElement {
     setValueEditError('');
     setTtlEditError('');
     setPreviewLoading(true);
-    setStatus('Loading preview');
+    setStatus(t('loadingPreview'));
     try {
       const nextPreview = await getRedisGuiApi().previewKey(connection.id, key);
       syncPreviewDrafts(nextPreview);
       setStatus(key);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Preview failed';
+      const message = error instanceof Error ? error.message : t('previewFailed');
       setPreviewError(message);
       setStatus(message);
     } finally {
@@ -533,14 +562,14 @@ function MainApp(): ReactElement {
     setSavingValue(true);
     setValueEditError('');
     try {
-      const request = buildSetKeyRequest(connection.id, preview, valueDraft);
+      const request = buildSetKeyRequest(connection.id, preview, valueDraft, t);
       await getRedisGuiApi().setKey(request);
       const nextPreview = await getRedisGuiApi().previewKey(connection.id, preview.key);
       syncPreviewDrafts(nextPreview);
       setKeys((items) => sortKeySummaries(items.map((item) => (item.key === nextPreview.key ? { ...item, type: nextPreview.type, ttl: nextPreview.ttl } : item))));
-      setStatus(`Saved ${preview.key}`);
+      setStatus(t('savedKey', { key: preview.key }));
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Save failed';
+      const message = error instanceof Error ? error.message : t('saveFailed');
       setValueEditError(message);
       setStatus(message);
     } finally {
@@ -553,7 +582,7 @@ function MainApp(): ReactElement {
     setBusy(true);
     setValueEditError('');
     try {
-      const request = buildCreateKeyRequest(connection.id, draft);
+      const request = buildCreateKeyRequest(connection.id, draft, t);
       await getRedisGuiApi().setKey(request);
       const nextPreview = await getRedisGuiApi().previewKey(connection.id, request.key);
       syncPreviewDrafts(nextPreview);
@@ -561,9 +590,9 @@ function MainApp(): ReactElement {
       setKeys((items) =>
         sortKeySummaries(mergeKeySummaries(items, [{ key: nextPreview.key, type: nextPreview.type, ttl: nextPreview.ttl }]))
       );
-      setStatus(`Created ${nextPreview.key}`);
+      setStatus(t('createdKey', { key: nextPreview.key }));
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Create key failed';
+      const message = error instanceof Error ? error.message : t('createKeyFailed');
       setValueEditError(message);
       setStatus(message);
       throw error;
@@ -581,9 +610,9 @@ function MainApp(): ReactElement {
       const nextPreview = await getRedisGuiApi().previewKey(connection.id, preview.key);
       syncPreviewDrafts(nextPreview);
       setKeys((items) => sortKeySummaries(items.map((item) => (item.key === nextPreview.key ? { ...item, type: nextPreview.type, ttl: nextPreview.ttl } : item))));
-      setStatus(`Saved ${preview.key}:${field}`);
+      setStatus(t('savedHashField', { key: preview.key, field }));
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Hash field save failed';
+      const message = error instanceof Error ? error.message : t('hashFieldSaveFailed');
       setValueEditError(message);
       setStatus(message);
     } finally {
@@ -596,14 +625,14 @@ function MainApp(): ReactElement {
     setSavingTtl(true);
     setTtlEditError('');
     try {
-      const ttl = parseTtlDraft(ttlDraft);
+      const ttl = parseTtlDraft(ttlDraft, t);
       await getRedisGuiApi().setKeyTtl({ connectionId: connection.id, key: preview.key, ttl });
       const nextPreview = await getRedisGuiApi().previewKey(connection.id, preview.key);
       syncPreviewDrafts(nextPreview);
       setKeys((items) => sortKeySummaries(items.map((item) => (item.key === nextPreview.key ? { ...item, ttl: nextPreview.ttl } : item))));
-      setStatus(`Saved TTL for ${preview.key}`);
+      setStatus(t('savedTtlFor', { key: preview.key }));
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'TTL save failed';
+      const message = error instanceof Error ? error.message : t('ttlSaveFailed');
       setTtlEditError(message);
       setStatus(message);
     } finally {
@@ -632,7 +661,7 @@ function MainApp(): ReactElement {
       syncPreviewDrafts(nextPreview);
       setPreviewError('');
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Preview refresh failed';
+      const message = error instanceof Error ? error.message : t('previewRefreshFailed');
       setPreviewError(message);
       setStatus(message);
     }
@@ -651,7 +680,7 @@ function MainApp(): ReactElement {
 
   async function deleteKey(key: string): Promise<void> {
     if (!connection) return;
-    const confirmed = window.confirm(`Delete key "${key}"?`);
+    const confirmed = window.confirm(t('deleteKeyConfirm', { key }));
     if (!confirmed) return;
     try {
       await getRedisGuiApi().deleteKey(connection.id, key);
@@ -670,17 +699,17 @@ function MainApp(): ReactElement {
         setTtlEditError('');
         setSelectedKey('');
       }
-      setStatus(`Deleted ${key}`);
+      setStatus(t('deletedKey', { key }));
       await refresh();
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Delete failed');
+      setStatus(error instanceof Error ? error.message : t('deleteFailed'));
     }
   }
 
   async function deleteBatchSelected(): Promise<void> {
     if (!connection || batchSelectedKeys.size === 0) return;
     const keysToDelete = Array.from(batchSelectedKeys);
-    const confirmed = window.confirm(`Delete ${keysToDelete.length} selected keys?`);
+    const confirmed = window.confirm(t('deleteSelectedKeysConfirm', { count: keysToDelete.length }));
     if (!confirmed) return;
 
     setBusy(true);
@@ -697,10 +726,10 @@ function MainApp(): ReactElement {
         setTtlEditError('');
       }
       setBatchSelectedKeys(new Set());
-      setStatus(`Deleted ${keysToDelete.length} keys`);
+      setStatus(t('deletedKeys', { count: keysToDelete.length }));
       await refresh();
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Batch delete failed');
+      setStatus(error instanceof Error ? error.message : t('batchDeleteFailed'));
     } finally {
       setBusy(false);
     }
@@ -766,14 +795,14 @@ function MainApp(): ReactElement {
       setConsoleHistory((items) => items.map((item) => (item.id === entryId ? { ...item, result: result.value } : item)));
       setStatus(command);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Command failed';
+      const message = error instanceof Error ? error.message : t('commandFailed');
       setConsoleHistory((items) => items.map((item) => (item.id === entryId ? { ...item, error: message } : item)));
       setStatus(message);
     }
   }
 
   function deleteConsoleEntry(id: string): void {
-    const confirmed = window.confirm('Delete this console history entry?');
+    const confirmed = window.confirm(t('deleteConsoleEntryConfirm'));
     if (!confirmed) return;
     setConsoleHistory((items) => items.filter((item) => item.id !== id));
   }
@@ -816,6 +845,7 @@ function MainApp(): ReactElement {
   }
 
   return (
+    <I18nContext.Provider value={i18n}>
     <main className={`app-root platform-${platform} theme-${settings.themeMode}`}>
       <WindowTitleBar title="Rist" updateStatus={updateStatus} onInstallUpdate={() => void installUpdate()} />
       <section
@@ -824,23 +854,23 @@ function MainApp(): ReactElement {
       >
         <aside className="sidebar">
           <div className="window-drag" />
-          <button className="sidebar-toggle" onClick={() => setSidebarCollapsed((value) => !value)} title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+          <button className="sidebar-toggle" onClick={() => setSidebarCollapsed((value) => !value)} title={sidebarCollapsed ? t('expandSidebar') : t('collapseSidebar')}>
             <PanelLeft size={15} />
           </button>
           <div className="sidebar-top-spacer" />
 
           <section className="nav-list">
-            <button className={view === 'connections' ? 'nav-item active' : 'nav-item'} onClick={() => setView('connections')} title="Connections">
+            <button className={view === 'connections' ? 'nav-item active' : 'nav-item'} onClick={() => setView('connections')} title={t('connections')}>
               <Settings2 size={16} />
-              <span>Connections</span>
+              <span>{t('connections')}</span>
             </button>
-            <button className={view === 'browser' ? 'nav-item active' : 'nav-item'} onClick={() => setView('browser')} title="Browser">
+            <button className={view === 'browser' ? 'nav-item active' : 'nav-item'} onClick={() => setView('browser')} title={t('browser')}>
               <Server size={16} />
-              <span>Browser</span>
+              <span>{t('browser')}</span>
             </button>
-            <button className={view === 'console' ? 'nav-item active' : 'nav-item'} onClick={() => setView('console')} title="Console">
+            <button className={view === 'console' ? 'nav-item active' : 'nav-item'} onClick={() => setView('console')} title={t('console')}>
               <TerminalSquare size={16} />
-              <span>Console</span>
+              <span>{t('console')}</span>
             </button>
           </section>
 
@@ -853,7 +883,7 @@ function MainApp(): ReactElement {
             ) : null}
             <button className="primary sidebar-connect" disabled={busy || !selectedConfig} onClick={connection ? disconnect : () => void connect()}>
               <Plug size={16} />
-              {busy ? 'Working...' : connection ? 'Disconnect' : 'Connect'}
+              {busy ? t('working') : connection ? t('disconnect') : t('connect')}
             </button>
           </section>
           <div className="sidebar-resizer" onMouseDown={startSidebarResize} />
@@ -937,30 +967,32 @@ function MainApp(): ReactElement {
           ) : null}
 
           <footer className="statusbar">
-            <span>{connection ? `${connection.name} · ${connection.address}` : selectedConfig ? `Selected · ${selectedConfig.name}` : 'No profile'}</span>
+            <span>{connection ? `${connection.name} · ${connection.address}` : selectedConfig ? t('selectedProfile', { name: selectedConfig.name }) : t('noProfile')}</span>
             <span>{status}</span>
           </footer>
         </section>
       </section>
     </main>
+    </I18nContext.Provider>
   );
 }
 
 function WindowTitleBar(props: { title: string; updateStatus?: UpdateStatus; onInstallUpdate?(): void }): ReactElement {
+  const { t } = useI18n();
   const updateStatus = props.updateStatus;
   const showInstallButton = updateStatus?.status === 'downloaded' && props.onInstallUpdate;
 
   return (
-    <header className="window-titlebar" aria-label="Window title bar">
+    <header className="window-titlebar" aria-label={t('windowTitleBar')}>
       <div className="window-titlebar-title">
         <Database size={15} />
         <span>{props.title}</span>
       </div>
       <div className="window-titlebar-actions">
         {showInstallButton ? (
-          <button className="titlebar-update-button" onClick={props.onInstallUpdate} title={formatUpdateStatus(updateStatus)}>
+          <button className="titlebar-update-button" onClick={props.onInstallUpdate} title={formatUpdateStatus(updateStatus, t)}>
             <RefreshCcw size={14} />
-            安装更新
+            {t('installUpdate')}
           </button>
         ) : null}
       </div>
@@ -974,6 +1006,8 @@ function SettingsWindowView(): ReactElement {
   const { updateStatus, checkForUpdates, installUpdate } = useUpdateStatus();
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [settingsDraft, setSettingsDraft] = useState<AppSettings>(defaultSettings);
+  const i18n = useMemo(() => createI18n(settingsDraft.language), [settingsDraft.language]);
+  const { t } = i18n;
   const [settingsError, setSettingsError] = useState('');
 
   useEffect(() => {
@@ -995,6 +1029,10 @@ function SettingsWindowView(): ReactElement {
   }, []);
 
   useEffect(() => {
+    document.documentElement.lang = settingsDraft.language === 'en' ? 'en' : 'zh-CN';
+  }, [settingsDraft.language]);
+
+  useEffect(() => {
     let cancelled = false;
 
     async function loadSettings(): Promise<void> {
@@ -1005,7 +1043,7 @@ function SettingsWindowView(): ReactElement {
         }
       } catch (error) {
         if (!cancelled) {
-          setSettingsError(error instanceof Error ? error.message : 'Unable to load settings');
+          setSettingsError(error instanceof Error ? error.message : t('unableToLoadSettings'));
         }
       }
     }
@@ -1035,26 +1073,27 @@ function SettingsWindowView(): ReactElement {
       setSettingsDraft(normalizeAppSettings(saved));
       setSettingsError('');
     } catch (error) {
-      setSettingsError(error instanceof Error ? error.message : 'Unable to save settings');
+      setSettingsError(error instanceof Error ? error.message : t('unableToSaveSettings'));
     }
   }
 
-  const tabLabel = activeTab === 'general' ? '通用' : activeTab === 'query' ? '查询' : '编辑器';
+  const tabLabel = activeTab === 'general' ? t('general') : activeTab === 'query' ? t('query') : t('editor');
 
   return (
+    <I18nContext.Provider value={i18n}>
     <main className={`settings-window platform-${platform} theme-${settingsDraft.themeMode}`}>
-      <WindowTitleBar title="设置" updateStatus={updateStatus} onInstallUpdate={() => void installUpdate()} />
-      <section className="settings-dialog" aria-label="设置">
+      <WindowTitleBar title={t('settings')} updateStatus={updateStatus} onInstallUpdate={() => void installUpdate()} />
+      <section className="settings-dialog" aria-label={t('settingsAria')}>
         <div className="settings-layout">
-          <nav className="settings-tabs" aria-label="Settings sections">
+          <nav className="settings-tabs" aria-label={t('settingsSections')}>
             <button className={activeTab === 'general' ? 'settings-tab active' : 'settings-tab'} onClick={() => setActiveTab('general')}>
-              通用
+              {t('general')}
             </button>
             <button className={activeTab === 'query' ? 'settings-tab active' : 'settings-tab'} onClick={() => setActiveTab('query')}>
-              查询
+              {t('query')}
             </button>
             <button className={activeTab === 'editor' ? 'settings-tab active' : 'settings-tab'} onClick={() => setActiveTab('editor')}>
-              编辑器
+              {t('editor')}
             </button>
           </nav>
           <section className="settings-panel">
@@ -1062,25 +1101,36 @@ function SettingsWindowView(): ReactElement {
             {activeTab === 'general' ? (
               <div className="settings-section">
                 <div className="settings-field">
-                  <span>主题</span>
-                  <div className="settings-segmented theme-mode-control" role="group" aria-label="主题">
+                  <span>{t('theme')}</span>
+                  <div className="settings-segmented theme-mode-control" role="group" aria-label={t('theme')}>
                     <button className={settingsDraft.themeMode === 'system' ? 'segmented active' : 'segmented'} onClick={() => updateSettingsDraft({ themeMode: 'system' })}>
-                      跟随系统
+                      {t('system')}
                     </button>
                     <button className={settingsDraft.themeMode === 'light' ? 'segmented active' : 'segmented'} onClick={() => updateSettingsDraft({ themeMode: 'light' })}>
-                      浅色
+                      {t('light')}
                     </button>
                     <button className={settingsDraft.themeMode === 'dark' ? 'segmented active' : 'segmented'} onClick={() => updateSettingsDraft({ themeMode: 'dark' })}>
-                      深色
+                      {t('dark')}
+                    </button>
+                  </div>
+                </div>
+                <div className="settings-field">
+                  <span>{t('language')}</span>
+                  <div className="settings-segmented" role="group" aria-label={t('language')}>
+                    <button className={settingsDraft.language === 'zh-CN' ? 'segmented active' : 'segmented'} onClick={() => updateSettingsDraft({ language: 'zh-CN' })}>
+                      {t('simplifiedChinese')}
+                    </button>
+                    <button className={settingsDraft.language === 'en' ? 'segmented active' : 'segmented'} onClick={() => updateSettingsDraft({ language: 'en' })}>
+                      {t('english')}
                     </button>
                   </div>
                 </div>
                 <div className="settings-field update-settings-field">
-                  <span>更新</span>
+                  <span>{t('updates')}</span>
                   <div className="update-settings-control">
                     <div className="update-settings-copy">
-                      <strong>{formatUpdateStatus(updateStatus)}</strong>
-                      <span>{formatUpdateDetail(updateStatus)}</span>
+                      <strong>{formatUpdateStatus(updateStatus, t)}</strong>
+                      <span>{formatUpdateDetail(updateStatus, t)}</span>
                     </div>
                     <button
                       className={updateStatus.status === 'downloaded' ? 'primary compact-primary' : 'secondary compact-secondary'}
@@ -1088,7 +1138,7 @@ function SettingsWindowView(): ReactElement {
                       onClick={updateStatus.status === 'downloaded' ? () => void installUpdate() : () => void checkForUpdates()}
                     >
                       <RefreshCcw size={14} />
-                      {updateActionLabel(updateStatus)}
+                      {updateActionLabel(updateStatus, t)}
                     </button>
                   </div>
                 </div>
@@ -1096,10 +1146,10 @@ function SettingsWindowView(): ReactElement {
             ) : null}
             {activeTab === 'query' ? (
               <div className="settings-section">
-                <div className="section-title">Key Browser</div>
+                <div className="section-title">{t('keyBrowser')}</div>
                 <div className="settings-field">
-                  <span>Key 折叠模式</span>
-                  <div className="settings-segmented" role="group" aria-label="Key 折叠模式">
+                  <span>{t('keyListMode')}</span>
+                  <div className="settings-segmented" role="group" aria-label={t('keyListMode')}>
                     <button className={settingsDraft.keyListMode === 'raw' ? 'segmented active' : 'segmented'} onClick={() => updateSettingsDraft({ keyListMode: 'raw' })}>
                       Raw
                     </button>
@@ -1109,7 +1159,7 @@ function SettingsWindowView(): ReactElement {
                   </div>
                 </div>
                 <label>
-                  每次游标扫描最大 Count
+                  {t('scanCount')}
                   <input
                     type="number"
                     min="10"
@@ -1121,12 +1171,13 @@ function SettingsWindowView(): ReactElement {
                 </label>
               </div>
             ) : null}
-            {activeTab === 'editor' ? <div className="settings-placeholder">暂无配置项</div> : null}
+            {activeTab === 'editor' ? <div className="settings-placeholder">{t('noSettings')}</div> : null}
             {settingsError ? <p className="settings-error">{settingsError}</p> : null}
           </section>
         </div>
       </section>
     </main>
+    </I18nContext.Provider>
   );
 }
 
@@ -1170,6 +1221,7 @@ function BrowserView(props: {
   onTtlDraftChange(ttl: string): void;
   onValueDraftChange(value: string): void;
 }): ReactElement {
+  const { t } = useI18n();
   const previewEditable = props.preview ? isEditableKeyType(props.preview.type) : false;
   const [valueEditing, setValueEditing] = useState(false);
   const [ttlEditing, setTtlEditing] = useState(false);
@@ -1324,7 +1376,7 @@ function BrowserView(props: {
       setNewKeyDraft(createEmptyNewKeyDraft());
       setCreatingKey(false);
     } catch (error) {
-      setNewKeyError(error instanceof Error ? error.message : 'Create key failed');
+      setNewKeyError(error instanceof Error ? error.message : t('createKeyFailed'));
     }
   }
 
@@ -1335,25 +1387,25 @@ function BrowserView(props: {
           <Search size={16} />
           <input value={props.pattern} onChange={(event) => props.onPatternChange(event.target.value)} />
         </div>
-        <button className="icon-button" disabled={!props.connection || props.busy} onClick={props.onRefresh} title="Refresh keys">
+        <button className="icon-button" disabled={!props.connection || props.busy} onClick={props.onRefresh} title={t('refreshKeys')}>
           <RefreshCcw size={16} />
         </button>
         <button
           className={creatingKey ? 'icon-button active' : 'icon-button'}
           disabled={!props.connection || props.busy}
           onClick={() => setCreatingKey((value) => !value)}
-          title={creatingKey ? 'Close new key form' : 'Add key'}
+          title={creatingKey ? t('closeNewKeyForm') : t('addKey')}
         >
           {creatingKey ? <X size={16} /> : <Plus size={16} />}
         </button>
         {batchMode ? (
           <div className="batch-actions">
             <span>{props.batchSelectedKeys.size}</span>
-            <button className="icon-button danger" disabled={props.busy} onClick={props.onDeleteBatchSelected} title="Delete selected keys">
+            <button className="icon-button danger" disabled={props.busy} onClick={props.onDeleteBatchSelected} title={t('deleteSelectedKeys')}>
               <Trash2 size={16} />
             </button>
             <button className="secondary compact-secondary" onClick={props.onClearBatchKeys}>
-              Clear
+              {t('clear')}
             </button>
           </div>
         ) : null}
@@ -1363,7 +1415,7 @@ function BrowserView(props: {
         {creatingKey ? (
           <form className="new-key-form" onSubmit={(event) => void submitNewKey(event)}>
             <label>
-              Key
+              {t('key')}
               <input
                 autoFocus
                 value={newKeyDraft.key}
@@ -1371,26 +1423,26 @@ function BrowserView(props: {
                 spellCheck={false}
               />
             </label>
-            <div className="new-key-type" role="group" aria-label="New key type">
+            <div className="new-key-type" role="group" aria-label={t('newKeyType')}>
               <button
                 className={newKeyDraft.type === 'string' ? 'segmented active' : 'segmented'}
                 type="button"
                 onClick={() => setNewKeyDraft((draft) => ({ ...draft, type: 'string' }))}
               >
-                String
+                {t('string')}
               </button>
               <button
                 className={newKeyDraft.type === 'hash' ? 'segmented active' : 'segmented'}
                 type="button"
                 onClick={() => setNewKeyDraft((draft) => ({ ...draft, type: 'hash' }))}
               >
-                Hash
+                {t('hash')}
               </button>
             </div>
             {newKeyDraft.type === 'hash' ? (
               <>
                 <label>
-                  Field
+                  {t('field')}
                   <input
                     value={newKeyDraft.hashField}
                     onChange={(event) => setNewKeyDraft((draft) => ({ ...draft, hashField: event.target.value }))}
@@ -1398,7 +1450,7 @@ function BrowserView(props: {
                   />
                 </label>
                 <label>
-                  Value
+                  {t('value')}
                   <input
                     value={newKeyDraft.hashValue}
                     onChange={(event) => setNewKeyDraft((draft) => ({ ...draft, hashValue: event.target.value }))}
@@ -1408,7 +1460,7 @@ function BrowserView(props: {
               </>
             ) : (
               <label>
-                Value
+                {t('value')}
                 <input
                   value={newKeyDraft.value}
                   onChange={(event) => setNewKeyDraft((draft) => ({ ...draft, value: event.target.value }))}
@@ -1417,18 +1469,18 @@ function BrowserView(props: {
               </label>
             )}
             <label>
-              TTL
+              {t('ttl')}
               <input
                 type="number"
                 min="1"
-                placeholder="Persist"
+                placeholder={t('persist')}
                 value={newKeyDraft.ttl}
                 onChange={(event) => setNewKeyDraft((draft) => ({ ...draft, ttl: event.target.value }))}
               />
             </label>
             <button className="primary compact-primary" disabled={props.busy} type="submit">
               <Plus size={14} />
-              Add
+              {t('add')}
             </button>
             {newKeyError ? <p className="new-key-error">{newKeyError}</p> : null}
           </form>
@@ -1436,7 +1488,7 @@ function BrowserView(props: {
         <section className="key-pane">
           <div className="pane-title">
             <KeyRound size={15} />
-            Keys
+            {t('keys')}
             <span>{props.keysLength}</span>
           </div>
           <div
@@ -1493,7 +1545,7 @@ function BrowserView(props: {
                 ))}
             {props.connection && props.scanCursor !== '0' ? (
               <button className="load-more-keys" disabled={props.busy} onClick={props.onLoadMore}>
-                Load more
+                {t('loadMore')}
               </button>
             ) : null}
           </div>
@@ -1504,7 +1556,7 @@ function BrowserView(props: {
           {props.previewLoading ? (
             <div className="empty-state">
               <Database size={28} />
-              <p>Loading value</p>
+              <p>{t('loadingValue')}</p>
             </div>
           ) : props.previewError ? (
             <div className="empty-state error-state">
@@ -1516,11 +1568,11 @@ function BrowserView(props: {
               <div className="preview-header">
                 <div>
                   <h1>{props.preview.key}</h1>
-                  <div className={ttlEditing ? 'preview-meta editing' : 'preview-meta'} onDoubleClick={() => setTtlEditing(true)} title="Double-click to edit TTL">
+                  <div className={ttlEditing ? 'preview-meta editing' : 'preview-meta'} onDoubleClick={() => setTtlEditing(true)} title={t('doubleClickEditTtl')}>
                     {ttlEditing ? (
                       <>
                         <span>{props.preview.type} · ttl</span>
-                        <input type="number" min="1" value={props.ttlDraft} onChange={(event) => props.onTtlDraftChange(event.target.value)} placeholder="Persist" autoFocus />
+                        <input type="number" min="1" value={props.ttlDraft} onChange={(event) => props.onTtlDraftChange(event.target.value)} placeholder={t('persist')} autoFocus />
                         <button
                           className="icon-button header-save-value"
                           disabled={props.savingTtl}
@@ -1528,16 +1580,16 @@ function BrowserView(props: {
                             props.onSaveTtl();
                             setTtlEditing(false);
                           }}
-                          title="Save TTL"
+                          title={t('saveTtl')}
                         >
                           <Save size={15} />
                         </button>
-                        {props.preview.size !== undefined ? <span>· {props.preview.size} items</span> : null}
+                        {props.preview.size !== undefined ? <span>· {t('itemCount', { count: props.preview.size })}</span> : null}
                       </>
                     ) : (
                       <>
                         {props.preview.type} · ttl {props.preview.ttl}
-                        {props.preview.size !== undefined ? ` · ${props.preview.size} items` : ''}
+                        {props.preview.size !== undefined ? ` · ${t('itemCount', { count: props.preview.size })}` : ''}
                       </>
                     )}
                   </div>
@@ -1548,23 +1600,23 @@ function BrowserView(props: {
                       <button
                         className={valueEditing ? 'icon-button active' : 'icon-button'}
                         onClick={() => setValueEditing((value) => !value)}
-                        title={valueEditing ? 'Preview value' : 'Edit value'}
+                        title={valueEditing ? t('previewValue') : t('editValue')}
                       >
                         {valueEditing ? <Eye size={15} /> : <Pencil size={15} />}
                       </button>
                       {valueEditing ? (
-                        <button className="icon-button header-save-value" disabled={props.savingValue} onClick={props.onSaveValue} title="Save value">
+                        <button className="icon-button header-save-value" disabled={props.savingValue} onClick={props.onSaveValue} title={t('saveValue')}>
                           <Save size={15} />
                         </button>
                       ) : null}
                     </>
                   ) : null}
                   {isHashPreview && !valueEditing ? (
-                    <button className={hashAddingField ? 'icon-button active' : 'icon-button'} disabled={props.savingValue} onClick={() => setHashAddingField((value) => !value)} title="Add hash field">
+                    <button className={hashAddingField ? 'icon-button active' : 'icon-button'} disabled={props.savingValue} onClick={() => setHashAddingField((value) => !value)} title={t('addHashField')}>
                       {hashAddingField ? <X size={15} /> : <Plus size={15} />}
                     </button>
                   ) : null}
-                  <button className="icon-button danger" onClick={props.onDeleteSelected} title="Delete selected key">
+                  <button className="icon-button danger" onClick={props.onDeleteSelected} title={t('deleteSelectedKey')}>
                     <Trash2 size={16} />
                   </button>
                 </div>
@@ -1595,7 +1647,7 @@ function BrowserView(props: {
           ) : (
             <div className="empty-state">
               <Database size={28} />
-              <p>{props.connection ? 'No key selected' : 'No connection'}</p>
+              <p>{props.connection ? t('noKeySelected') : t('noConnection')}</p>
             </div>
           )}
         </section>
@@ -1611,6 +1663,7 @@ function ValuePreviewContent(props: {
   onAddingFieldChange(addingField: boolean): void;
   onSaveHashField(field: string, value: string): void;
 }): ReactElement {
+  const { t } = useI18n();
   if (props.preview.type === 'hash') {
     return (
       <HashPreviewTable
@@ -1623,7 +1676,7 @@ function ValuePreviewContent(props: {
     );
   }
 
-  return <pre className="value-preview">{formatPreviewValue(props.preview.type, props.preview.value)}</pre>;
+  return <pre className="value-preview">{formatPreviewValue(props.preview.type, props.preview.value, t)}</pre>;
 }
 
 function HashPreviewTable(props: {
@@ -1633,6 +1686,7 @@ function HashPreviewTable(props: {
   onAddingFieldChange(addingField: boolean): void;
   onSaveHashField(field: string, value: string): void;
 }): ReactElement {
+  const { t } = useI18n();
   const entries = getHashEntries(props.preview.value);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [fieldDraft, setFieldDraft] = useState('');
@@ -1692,11 +1746,11 @@ function HashPreviewTable(props: {
     event.preventDefault();
     const field = newFieldDraft.trim();
     if (!field) {
-      setNewFieldError('Field is required.');
+      setNewFieldError(t('fieldRequired'));
       return;
     }
     if (entries.some(([itemField]) => itemField === field)) {
-      setNewFieldError('Field already exists.');
+      setNewFieldError(t('fieldAlreadyExists'));
       return;
     }
     setNewFieldError('');
@@ -1714,24 +1768,24 @@ function HashPreviewTable(props: {
             autoFocus
             value={newFieldDraft}
             onChange={(event) => setNewFieldDraft(event.target.value)}
-            placeholder="Field"
+            placeholder={t('field')}
             spellCheck={false}
           />
-          <input value={newValueDraft} onChange={(event) => setNewValueDraft(event.target.value)} placeholder="Value" spellCheck={false} />
+          <input value={newValueDraft} onChange={(event) => setNewValueDraft(event.target.value)} placeholder={t('value')} spellCheck={false} />
           <button className="primary compact-primary" disabled={props.savingValue} type="submit">
             <Plus size={14} />
-            Add
+            {t('add')}
           </button>
           {newFieldError ? <p className="hash-add-error">{newFieldError}</p> : null}
         </form>
       ) : null}
       {entries.length === 0 ? (
-        <pre className="value-preview">(empty hash)</pre>
+        <pre className="value-preview">{t('emptyHash')}</pre>
       ) : (
-        <div className="hash-table" role="table" aria-label="Hash fields">
+        <div className="hash-table" role="table" aria-label={t('hashFields')}>
           <div className="hash-table-head" role="row">
-            <div role="columnheader">Field</div>
-            <div role="columnheader">Content</div>
+            <div role="columnheader">{t('field')}</div>
+            <div role="columnheader">{t('content')}</div>
           </div>
           {entries.map(([field, value]) => (
             <div className="hash-table-row" role="row" key={field}>
@@ -1775,6 +1829,7 @@ function KeyRow(props: {
   onSelectKey(key: string): void;
   onToggleBatchKey(key: string): void;
 }): ReactElement {
+  const { t } = useI18n();
   const pointerStart = useRef<{ x: number; y: number; swiping: boolean; selecting: boolean } | null>(null);
   const wheelSwipe = useRef<{ delta: number; timeout: number | null }>({ delta: 0, timeout: null });
   const [swiped, setSwiped] = useState(false);
@@ -1856,13 +1911,13 @@ function KeyRow(props: {
       }}
       style={{ '--key-depth': props.depth } as CSSProperties}
     >
-      <button className="key-delete-action" onClick={() => props.onDeleteKey(props.item.key)} title="Delete key">
-        Delete
+      <button className="key-delete-action" onClick={() => props.onDeleteKey(props.item.key)} title={t('deleteSelectedKey')}>
+        {t('delete')}
       </button>
       <div className={props.selectedKey === props.item.key ? 'key-row selected' : 'key-row'}>
         {props.batchMode ? (
           <input
-            aria-label={`Select ${props.item.key}`}
+            aria-label={`${t('selectKey')} ${props.item.key}`}
             checked={props.batchSelected}
             className="key-check"
             onChange={() => props.onToggleBatchKey(props.item.key)}
@@ -1959,6 +2014,7 @@ function ConsoleView(props: {
   onDeleteEntry(id: string): void;
   onRunCommand(event: FormEvent<HTMLFormElement>): void;
 }): ReactElement {
+  const { t } = useI18n();
   const commandInput = useRef<HTMLInputElement>(null);
   const historyPane = useRef<HTMLDivElement>(null);
   const lastEntry = props.history[props.history.length - 1];
@@ -1976,7 +2032,7 @@ function ConsoleView(props: {
       <header className="toolbar console-toolbar">
         <div>
           <TerminalSquare size={16} />
-          <span>{props.connection ? props.connection.name : 'Console'}</span>
+          <span>{props.connection ? props.connection.name : t('console')}</span>
         </div>
       </header>
       <section className="terminal-pane">
@@ -1984,7 +2040,7 @@ function ConsoleView(props: {
           {props.history.length === 0 ? (
             <div className="empty-state">
               <TerminalSquare size={28} />
-              <p>{props.connection ? 'Console ready' : 'No connection'}</p>
+              <p>{props.connection ? t('consoleReady') : t('noConnection')}</p>
             </div>
           ) : (
             props.history.map((entry) => (
@@ -1994,7 +2050,7 @@ function ConsoleView(props: {
                     <span>&gt;</span>
                     <code>{entry.command}</code>
                   </div>
-                  <button className="console-delete" onClick={() => props.onDeleteEntry(entry.id)} title="Delete history entry">
+                  <button className="console-delete" onClick={() => props.onDeleteEntry(entry.id)} title={t('deleteHistoryEntry')}>
                     <Trash2 size={13} />
                   </button>
                 </div>
@@ -2007,7 +2063,7 @@ function ConsoleView(props: {
           className={props.connection ? 'terminal-command' : 'terminal-command disconnected'}
           onClick={() => commandInput.current?.focus()}
           onSubmit={props.onRunCommand}
-          title={props.connection ? undefined : 'No active connection'}
+          title={props.connection ? undefined : t('noActiveConnection')}
         >
           <span className="terminal-prompt">redis&gt;</span>
           <input ref={commandInput} value={props.command} disabled={!props.connection} onChange={(event) => props.onCommandChange(event.target.value)} spellCheck={false} />
@@ -2036,6 +2092,7 @@ function ConnectionsView(props: {
   testMessage: string;
   testState: TestState;
 }): ReactElement {
+  const { t } = useI18n();
   const endpoint = props.selectedConfig.endpoints[0] ?? { host: '127.0.0.1', port: 6379 };
   const endpoints = props.selectedConfig.endpoints.length > 0 ? props.selectedConfig.endpoints : [endpoint];
   const selectedColor = props.selectedConfig.color;
@@ -2051,7 +2108,7 @@ function ConnectionsView(props: {
   }
 
   function removeEndpoint(index: number): void {
-    const confirmed = window.confirm('Delete this endpoint?');
+    const confirmed = window.confirm(t('deleteEndpointConfirm'));
     if (!confirmed) return;
     const next = endpoints.filter((_item, itemIndex) => itemIndex !== index);
     props.onUpdate({ endpoints: next.length > 0 ? next : [{ host: '127.0.0.1', port: 6379 }] });
@@ -2086,22 +2143,22 @@ function ConnectionsView(props: {
     <>
       <header className="toolbar page-toolbar">
         <div className="toolbar-title">
-          <h1>Connections</h1>
-          <span>{props.configs.length} profiles</span>
+          <h1>{t('connections')}</h1>
+          <span>{t('profileCount', { count: props.configs.length })}</span>
         </div>
         <div className="toolbar-actions">
-          <button className="icon-button" onClick={props.onAdd} title="Add connection">
+          <button className="icon-button" onClick={props.onAdd} title={t('addConnection')}>
             <Plus size={16} />
           </button>
-          <button className="icon-button" onClick={props.onDuplicate} title="Duplicate connection">
+          <button className="icon-button" onClick={props.onDuplicate} title={t('duplicateConnection')}>
             <Copy size={16} />
           </button>
-          <button className="icon-button danger" disabled={props.configs.length === 1} onClick={props.onDelete} title="Delete connection">
+          <button className="icon-button danger" disabled={props.configs.length === 1} onClick={props.onDelete} title={t('deleteConnection')}>
             <Trash2 size={16} />
           </button>
           <button className="primary compact-primary" disabled={props.busy} onClick={props.onConnect}>
             <Plug size={14} />
-            Connect
+            {t('connect')}
           </button>
         </div>
       </header>
@@ -2116,12 +2173,12 @@ function ConnectionsView(props: {
                 className={config.id === props.selectedConfig.id ? 'profile-row selected' : 'profile-row'}
                 onClick={() => props.onSelect(config.id ?? '')}
                 onDoubleClick={() => props.onConnectConfig(config)}
-                title="Double-click to connect"
+                title={t('doubleClickConnect')}
               >
                 <span className={config.color ? 'profile-color' : 'profile-color empty'} style={{ background: config.color ?? 'transparent' }} />
                 <span className="profile-main">
                   <span>{config.name}</span>
-                  <small>{first ? `${first.host}:${first.port}` : 'No endpoint'}</small>
+                  <small>{first ? `${first.host}:${first.port}` : t('noEndpoint')}</small>
                 </span>
               </button>
             );
@@ -2136,17 +2193,17 @@ function ConnectionsView(props: {
               Redis
             </div>
             <label>
-              Name
+              {t('name')}
               <input value={props.selectedConfig.name} onChange={(event) => props.onUpdate({ name: event.target.value })} />
             </label>
             <div className="color-field">
               <span>
-                Profile Color
-                <em>Optional</em>
+                {t('profileColor')}
+                <em>{t('optional')}</em>
               </span>
               <div className="color-swatches">
                 <button className={!selectedColor ? 'color-none selected' : 'color-none'} onClick={() => props.onUpdate({ color: undefined })}>
-                  None
+                  {t('none')}
                 </button>
                 {connectionColors.map((color) => (
                   <button
@@ -2160,38 +2217,38 @@ function ConnectionsView(props: {
               </div>
             </div>
             <div className="form-field">
-              <span>Mode</span>
+              <span>{t('mode')}</span>
               <div className="connection-segmented">
                 <button className={props.selectedConfig.mode === 'single' ? 'segmented active' : 'segmented'} onClick={() => props.onUpdate({ mode: 'single' })}>
-                  Single
+                  {t('single')}
                 </button>
                 <button className={props.selectedConfig.mode === 'cluster' ? 'segmented active' : 'segmented'} onClick={() => props.onUpdate({ mode: 'cluster' })}>
-                  Cluster
+                  {t('cluster')}
                 </button>
               </div>
             </div>
             <div className="endpoints-section">
               <div className="section-heading">
-                <div className="section-title">Endpoints</div>
+                <div className="section-title">{t('endpoints')}</div>
                 {props.selectedConfig.mode === 'cluster' ? (
                   <button className="secondary compact-secondary" onClick={addEndpoint}>
                     <Plus size={14} />
-                    Add Node
+                    {t('addNode')}
                   </button>
                 ) : null}
               </div>
               {(props.selectedConfig.mode === 'cluster' ? endpoints : endpoints.slice(0, 1)).map((item, index) => (
                 <div className="endpoint-row" key={`${index}-${item.host}-${item.port}`}>
                   <label>
-                    Redis Host
+                    {t('host')}
                     <input value={item.host} onChange={(event) => updateEndpoint(index, { host: event.target.value })} />
                   </label>
                   <label className="port">
-                    Redis Port
+                    {t('port')}
                     <input type="number" value={item.port} onChange={(event) => updateEndpoint(index, { port: Number(event.target.value) || 6379 })} />
                   </label>
                   {props.selectedConfig.mode === 'cluster' ? (
-                    <button className="icon-button danger endpoint-delete" disabled={endpoints.length === 1} onClick={() => removeEndpoint(index)} title="Remove endpoint">
+                    <button className="icon-button danger endpoint-delete" disabled={endpoints.length === 1} onClick={() => removeEndpoint(index)} title={t('removeEndpoint')}>
                       <Trash2 size={14} />
                     </button>
                   ) : null}
@@ -2200,11 +2257,11 @@ function ConnectionsView(props: {
             </div>
             <div className="row compact">
               <label>
-                Redis Username
+                {t('username')}
                 <input value={props.selectedConfig.username ?? ''} onChange={(event) => props.onUpdate({ username: event.target.value || undefined })} />
               </label>
               <label>
-                Database
+                {t('database')}
                 <input
                   type="number"
                   value={props.selectedConfig.database ?? 0}
@@ -2213,7 +2270,7 @@ function ConnectionsView(props: {
               </label>
             </div>
             <label>
-              Redis Password
+              {t('password')}
               <input
                 type="password"
                 value={props.selectedConfig.password ?? ''}
@@ -2229,64 +2286,64 @@ function ConnectionsView(props: {
               <div className="section-heading">
                 <div className="section-title">
                   <Server size={14} />
-                  Access Path
+                  {t('accessPath')}
                 </div>
-                <span className="route-status">{props.sshTunnel.enabled ? 'Via SSH' : 'Direct'}</span>
+                <span className="route-status">{props.sshTunnel.enabled ? t('viaSsh') : t('direct')}</span>
               </div>
               <div className="route-options">
                 <button className={props.sshTunnel.enabled ? 'route-option' : 'route-option active'} onClick={() => props.onUpdateSsh({ enabled: false })}>
-                  <span>Direct</span>
-                  <small>Use the Redis host and port as configured.</small>
+                  <span>{t('direct')}</span>
+                  <small>{t('directDescription')}</small>
                 </button>
                 <button className={props.sshTunnel.enabled ? 'route-option active' : 'route-option'} onClick={() => props.onUpdateSsh({ enabled: true })}>
-                  <span>SSH Tunnel</span>
-                  <small>Forward Redis through a jump host.</small>
+                  <span>{t('sshTunnel')}</span>
+                  <small>{t('sshTunnelDescription')}</small>
                 </button>
               </div>
               {props.sshTunnel.enabled ? (
                 <div className="ssh-fields">
                   <div className="row">
                     <label>
-                      SSH Host / IP
+                      {t('sshHostIp')}
                       <input value={props.sshTunnel.host} onChange={(event) => props.onUpdateSsh({ host: event.target.value })} />
                     </label>
                     <label className="port">
-                      SSH Port
+                      {t('sshPort')}
                       <input type="number" value={props.sshTunnel.port} onChange={(event) => props.onUpdateSsh({ port: Number(event.target.value) || 22 })} />
                     </label>
                   </div>
                   <label>
-                    SSH Username
+                    {t('sshUsername')}
                     <input value={props.sshTunnel.username} onChange={(event) => props.onUpdateSsh({ username: event.target.value })} />
                   </label>
                   <label>
                     <span className="label-with-icon">
                       <LockKeyhole size={12} />
-                      SSH Password
-                      <em>Optional</em>
+                      {t('sshPassword')}
+                      <em>{t('optional')}</em>
                     </span>
                     <input type="password" value={props.sshTunnel.password ?? ''} onChange={(event) => props.onUpdateSsh({ password: event.target.value || undefined })} />
                   </label>
                   <label>
                     <span className="label-with-icon">
                       <FileKey2 size={12} />
-                      Private Key Path
-                      <em>Optional</em>
+                      {t('privateKeyPath')}
+                      <em>{t('optional')}</em>
                     </span>
                     <input value={props.sshTunnel.privateKeyPath ?? ''} onChange={(event) => props.onUpdateSsh({ privateKeyPath: event.target.value || undefined })} />
                   </label>
                   <label>
                     <span className="label-with-icon">
                       <FileKey2 size={12} />
-                      Private Key Content
-                      <em>Optional</em>
+                      {t('privateKeyContent')}
+                      <em>{t('optional')}</em>
                     </span>
                     <textarea value={props.sshTunnel.privateKey ?? ''} onChange={(event) => props.onUpdateSsh({ privateKey: event.target.value || undefined })} rows={4} />
                   </label>
                   <label>
                     <span className="label-with-icon">
-                      Key Passphrase
-                      <em>Optional</em>
+                      {t('keyPassphrase')}
+                      <em>{t('optional')}</em>
                     </span>
                     <input type="password" value={props.sshTunnel.passphrase ?? ''} onChange={(event) => props.onUpdateSsh({ passphrase: event.target.value || undefined })} />
                   </label>
@@ -2297,15 +2354,15 @@ function ConnectionsView(props: {
               <div className="test-action">
                 <button className="secondary compact-secondary" disabled={props.testState === 'testing'} onClick={props.onTest}>
                   <FlaskConical size={14} />
-                  {props.testState === 'testing' ? 'Testing' : 'Test'}
+                  {props.testState === 'testing' ? t('testing') : t('test')}
                 </button>
                 {props.testState !== 'idle' ? <span className={`test-result ${props.testState}`}>{props.testMessage}</span> : null}
               </div>
               <div className="save-action">
-                <span className={`save-indicator ${props.saveState}`}>{saveStateLabel(props.saveState)}</span>
+                <span className={`save-indicator ${props.saveState}`}>{saveStateLabel(props.saveState, t)}</span>
                 <button className="primary compact-primary" disabled={props.saveState === 'saved' || props.saveState === 'saving'} onClick={props.onSave}>
                   <Save size={14} />
-                  {props.saveState === 'saving' ? 'Saving' : 'Save'}
+                  {props.saveState === 'saving' ? t('saving') : t('save')}
                 </button>
               </div>
             </div>
@@ -2423,7 +2480,8 @@ function normalizeAppSettings(value: Partial<AppSettings> | undefined): AppSetti
   return {
     keyListMode: value?.keyListMode === 'tree' ? 'tree' : defaultSettings.keyListMode,
     keyScanCount: Number.isInteger(count) ? Math.min(10000, Math.max(10, count)) : defaultSettings.keyScanCount,
-    themeMode: value?.themeMode === 'light' || value?.themeMode === 'dark' ? value.themeMode : defaultSettings.themeMode
+    themeMode: value?.themeMode === 'light' || value?.themeMode === 'dark' ? value.themeMode : defaultSettings.themeMode,
+    language: normalizeLanguage(value?.language)
   };
 }
 
@@ -2465,17 +2523,17 @@ function createEmptyNewKeyDraft(): NewKeyDraft {
   };
 }
 
-function buildCreateKeyRequest(connectionId: string, draft: NewKeyDraft): SetKeyRequest {
+function buildCreateKeyRequest(connectionId: string, draft: NewKeyDraft, t: TFunction): SetKeyRequest {
   const key = draft.key.trim();
   if (!key) {
-    throw new Error('Key is required.');
+    throw new Error(t('keyRequired'));
   }
 
-  const ttl = parseTtlDraft(draft.ttl);
+  const ttl = parseTtlDraft(draft.ttl, t);
   if (draft.type === 'hash') {
     const field = draft.hashField.trim();
     if (!field) {
-      throw new Error('Hash field is required.');
+      throw new Error(t('hashFieldRequired'));
     }
     return {
       connectionId,
@@ -2502,28 +2560,28 @@ function getHashEntries(value: unknown): Array<[string, string]> {
   return Object.entries(value.items).map(([field, itemValue]) => [field, String(itemValue)]);
 }
 
-function buildSetKeyRequest(connectionId: string, preview: KeyPreview, valueDraft: string): SetKeyRequest {
+function buildSetKeyRequest(connectionId: string, preview: KeyPreview, valueDraft: string, t: TFunction): SetKeyRequest {
   if (!isEditableKeyType(preview.type)) {
-    throw new Error(`Cannot edit Redis type "${preview.type}".`);
+    throw new Error(t('cannotEditRedisType', { type: preview.type }));
   }
 
   return {
     connectionId,
     key: preview.key,
     type: preview.type,
-    value: parseValueDraft(preview.type, valueDraft),
+    value: parseValueDraft(preview.type, valueDraft, t),
     ttl: preview.ttl > 0 ? preview.ttl : null
   };
 }
 
-function parseValueDraft(type: EditableKeyType, valueDraft: string): unknown {
+function parseValueDraft(type: EditableKeyType, valueDraft: string, t: TFunction): unknown {
   switch (type) {
     case 'string':
       return valueDraft;
     case 'hash': {
       const parsed = JSON.parse(valueDraft || '{}') as unknown;
       if (!isRecord(parsed)) {
-        throw new Error('Hash value must be a JSON object.');
+        throw new Error(t('hashValueJsonObject'));
       }
       return Object.fromEntries(Object.entries(parsed).map(([key, value]) => [key, String(value)]));
     }
@@ -2531,31 +2589,31 @@ function parseValueDraft(type: EditableKeyType, valueDraft: string): unknown {
     case 'set':
       return valueDraft.length > 0 ? valueDraft.split(/\r?\n/) : [];
     case 'zset':
-      return parseZsetDraft(valueDraft);
+      return parseZsetDraft(valueDraft, t);
   }
 }
 
-function parseZsetDraft(valueDraft: string): string[] {
+function parseZsetDraft(valueDraft: string, t: TFunction): string[] {
   const args: string[] = [];
   const lines = valueDraft.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   for (const line of lines) {
     const match = line.match(/^([+-]?(?:\d+|\d*\.\d+))\s+(.+)$/);
     if (!match) {
-      throw new Error('ZSET rows must use "score member".');
+      throw new Error(t('zsetRowsFormat'));
     }
     args.push(match[1], match[2]);
   }
   return args;
 }
 
-function parseTtlDraft(ttlDraft: string): number | null {
+function parseTtlDraft(ttlDraft: string, t: TFunction): number | null {
   const trimmed = ttlDraft.trim();
   if (!trimmed) {
     return null;
   }
   const ttl = Number(trimmed);
   if (!Number.isInteger(ttl) || ttl <= 0) {
-    throw new Error('TTL must be a positive whole number.');
+    throw new Error(t('ttlPositiveInteger'));
   }
   return ttl;
 }
@@ -2590,28 +2648,28 @@ function formatConsoleValue(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
-function formatPreviewValue(type: string, value: unknown): string {
+function formatPreviewValue(type: string, value: unknown, t: TFunction): string {
   if (value === undefined) {
-    return '(empty)';
+    return t('empty');
   }
   if (value === null) {
-    return '(nil)';
+    return t('nil');
   }
   if (typeof value === 'string') {
-    return value.length > 0 ? revealInvisibleText(value) : '(empty string)';
+    return value.length > 0 ? revealInvisibleText(value) : t('emptyString');
   }
   if (type === 'hash' && isRecord(value)) {
     const items = value.items;
     if (isRecord(items)) {
       const entries = Object.entries(items);
-      return entries.length > 0 ? entries.map(([key, itemValue]) => `${key}: ${String(itemValue)}`).join('\n') : '(empty hash)';
+      return entries.length > 0 ? entries.map(([key, itemValue]) => `${key}: ${String(itemValue)}`).join('\n') : t('emptyHash');
     }
   }
   if (type === 'set' && isRecord(value) && Array.isArray(value.items)) {
-    return value.items.length > 0 ? value.items.map(String).join('\n') : '(empty set)';
+    return value.items.length > 0 ? value.items.map(String).join('\n') : t('emptySet');
   }
   if (type === 'zset' && Array.isArray(value)) {
-    if (value.length === 0) return '(empty zset)';
+    if (value.length === 0) return t('emptyZset');
     const lines: string[] = [];
     for (let index = 0; index < value.length; index += 2) {
       lines.push(`${String(value[index])}  ${String(value[index + 1] ?? '')}`);
@@ -2619,21 +2677,21 @@ function formatPreviewValue(type: string, value: unknown): string {
     return lines.join('\n');
   }
   if (Array.isArray(value)) {
-    return value.length > 0 ? value.map((item) => (typeof item === 'string' ? revealInvisibleText(item) : stringifyPreviewItem(item))).join('\n') : `(empty ${type})`;
+    return value.length > 0 ? value.map((item) => (typeof item === 'string' ? revealInvisibleText(item) : stringifyPreviewItem(item, t))).join('\n') : t('emptyTyped', { type });
   }
-  return stringifyPreviewItem(value);
+  return stringifyPreviewItem(value, t);
 }
 
 function revealInvisibleText(value: string): string {
   if (value.length === 0) {
-    return '(empty string)';
+    return translate(defaultLanguage, 'emptyString');
   }
   return value.replace(/\0/g, '\\0');
 }
 
-function stringifyPreviewItem(value: unknown): string {
-  if (value === undefined) return '(empty)';
-  if (value === null) return '(nil)';
+function stringifyPreviewItem(value: unknown, t: TFunction = (key, params) => translate(defaultLanguage, key, params)): string {
+  if (value === undefined) return t('empty');
+  if (value === null) return t('nil');
   if (typeof value === 'string') return revealInvisibleText(value);
   return JSON.stringify(value, null, 2) ?? String(value);
 }
@@ -2642,80 +2700,80 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function saveStateLabel(state: SaveState): string {
+function saveStateLabel(state: SaveState, t: TFunction): string {
   switch (state) {
     case 'dirty':
-      return 'Unsaved changes';
+      return t('unsavedChanges');
     case 'saving':
-      return 'Saving';
+      return t('saving');
     case 'error':
-      return 'Save failed';
+      return t('saveFailed');
     case 'saved':
     default:
-      return 'Saved';
+      return t('saved');
   }
 }
 
-function formatUpdateStatus(status: UpdateStatus): string {
+function formatUpdateStatus(status: UpdateStatus, t: TFunction): string {
   switch (status.status) {
     case 'disabled':
-      return '打包版本中可用';
+      return t('updateDisabled');
     case 'checking':
-      return '正在检查更新';
+      return t('updateChecking');
     case 'available':
-      return `发现 ${status.availableVersion ?? '新版本'}`;
+      return t('updateAvailable', { version: status.availableVersion ?? t('updateNewVersion') });
     case 'downloading':
-      return `正在下载 ${Math.round(status.percent ?? 0)}%`;
+      return t('updateDownloading', { percent: Math.round(status.percent ?? 0) });
     case 'downloaded':
-      return `新版本 ${status.availableVersion ?? ''} 已就绪`.trim();
+      return t('updateDownloaded', { version: status.availableVersion ?? '' }).trim();
     case 'not-available':
-      return '已是最新版本';
+      return t('updateNotAvailable');
     case 'installing':
-      return '正在安装更新';
+      return t('updateInstalling');
     case 'error':
-      return '更新检查失败';
+      return t('updateError');
     case 'idle':
     default:
-      return '尚未检查更新';
+      return t('updateIdle');
   }
 }
 
-function formatUpdateDetail(status: UpdateStatus): string {
+function formatUpdateDetail(status: UpdateStatus, t: TFunction): string {
   if (status.status === 'disabled') {
-    return '开发模式不会连接发布渠道。';
+    return t('updateDisabledDetail');
   }
   if (status.status === 'downloaded') {
-    return '点击安装后会退出应用，安装完成后自动重新打开。';
+    return t('updateDownloadedDetail');
   }
   if (status.status === 'downloading') {
-    return status.availableVersion ? `正在后台下载 ${status.availableVersion}` : '正在后台下载更新';
+    return status.availableVersion ? t('updateDownloadingDetailWithVersion', { version: status.availableVersion }) : t('updateDownloadingDetail');
   }
   if (status.status === 'error') {
-    return status.message ?? '请稍后重试。';
+    return status.message ?? t('updateRetryLater');
   }
   if (status.status === 'not-available') {
-    return `当前版本 ${status.currentVersion}`;
+    return t('updateCurrentVersion', { version: status.currentVersion });
   }
   if (status.availableVersion) {
-    return `当前版本 ${status.currentVersion}，最新版本 ${status.availableVersion}`;
+    return t('updateCurrentLatestVersion', { currentVersion: status.currentVersion, availableVersion: status.availableVersion });
   }
-  return status.message ?? `当前版本 ${status.currentVersion || '未知'}`;
+  return status.message ?? t('updateCurrentVersion', { version: status.currentVersion || t('updateUnknownVersion') });
 }
 
-function updateActionLabel(status: UpdateStatus): string {
+function updateActionLabel(status: UpdateStatus, t: TFunction): string {
   switch (status.status) {
     case 'downloaded':
-      return '安装并重启';
+      return t('updateInstallRestart');
     case 'checking':
-      return '检查中';
+      return t('updateCheckingAction');
     case 'downloading':
-      return '下载中';
+      return t('updateDownloadingAction');
     case 'installing':
-      return '安装中';
+      return t('updateInstallingAction');
     case 'disabled':
-      return '不可用';
+      return t('updateUnavailableAction');
     default:
-      return '检查更新';
+      return t('updateCheckAction');
   }
 }
 
@@ -2725,7 +2783,7 @@ function createId(): string {
 
 function getRedisGuiApi() {
   if (!window.redisGui) {
-    throw new Error('Rist preload API is unavailable. Restart the Electron app and check the preload path.');
+    throw new Error(translate(defaultLanguage, 'preloadUnavailable'));
   }
   return window.redisGui;
 }

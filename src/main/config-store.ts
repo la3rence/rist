@@ -2,12 +2,14 @@ import { app, safeStorage } from 'electron';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { AppSettings, RedisConnectionConfig, SavedConnections } from '../shared/types';
+import { defaultLanguage, normalizeLanguage } from '../shared/i18n';
 
 const configFileName = 'connection-config.json';
 const defaultAppSettings: AppSettings = {
   keyListMode: 'raw',
   keyScanCount: 1000,
-  themeMode: 'system'
+  themeMode: 'system',
+  language: defaultLanguage
 };
 
 type StoredConfigData = SavedConnections & {
@@ -136,6 +138,7 @@ function normalizeAppSettings(value: Partial<AppSettings> | undefined): AppSetti
   return {
     keyListMode: value?.keyListMode === 'tree' ? 'tree' : defaultAppSettings.keyListMode,
     keyScanCount: Number.isInteger(count) ? Math.min(10000, Math.max(10, count)) : defaultAppSettings.keyScanCount,
-    themeMode: value?.themeMode === 'light' || value?.themeMode === 'dark' ? value.themeMode : defaultAppSettings.themeMode
+    themeMode: value?.themeMode === 'light' || value?.themeMode === 'dark' ? value.themeMode : defaultAppSettings.themeMode,
+    language: normalizeLanguage(value?.language)
   };
 }

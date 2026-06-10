@@ -2,8 +2,9 @@ import { BrowserWindow, ipcMain, nativeTheme } from 'electron';
 import { ConfigStore } from './config-store';
 import { RedisService } from './redis-service';
 import { updateService } from './update-service';
+import type { AppSettings } from '../shared/types';
 
-export function registerIpc(): void {
+export function registerIpc(onSettingsSaved?: (settings: AppSettings) => void): void {
   const configStore = new ConfigStore();
   const redis = new RedisService();
 
@@ -20,6 +21,7 @@ export function registerIpc(): void {
   ipcMain.handle('config:saveSettings', async (_event, settings) => {
     const saved = await configStore.saveSettings(settings);
     nativeTheme.themeSource = saved.themeMode;
+    onSettingsSaved?.(saved);
     BrowserWindow.getAllWindows().forEach((window) => {
       if (!window.isDestroyed()) {
         window.webContents.send('config:settingsChanged', saved);
