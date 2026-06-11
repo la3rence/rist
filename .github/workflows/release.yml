@@ -149,6 +149,41 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Configure macOS code signing
+        if: matrix.platform == 'macOS'
+        shell: bash
+        env:
+          MAC_CODESIGN_CERT_BASE64: ${{ secrets.MAC_CODESIGN_CERT_BASE64 }}
+          MAC_CODESIGN_CERT_PASSWORD: ${{ secrets.MAC_CODESIGN_CERT_PASSWORD }}
+          MAC_CODESIGN_CERT_NAME: ${{ secrets.MAC_CODESIGN_CERT_NAME }}
+        run: |
+          if [ -z "$MAC_CODESIGN_CERT_BASE64" ]; then
+            echo "MAC_CODESIGN_CERT_BASE64 is not configured; macOS build will use the ad-hoc fallback."
+            exit 0
+          fi
+
+          if [ -z "$MAC_CODESIGN_CERT_PASSWORD" ]; then
+            echo "MAC_CODESIGN_CERT_PASSWORD is required when MAC_CODESIGN_CERT_BASE64 is configured." >&2
+            exit 1
+          fi
+
+          cert_name="${MAC_CODESIGN_CERT_NAME:-Rist Local Code Signing}"
+          append_env() {
+            local name="$1"
+            local value="$2"
+            local delimiter="EOF_${name}_$(uuidgen | tr -d '-')"
+
+            {
+              echo "$name<<$delimiter"
+              echo "$value"
+              echo "$delimiter"
+            } >> "$GITHUB_ENV"
+          }
+
+          append_env "CSC_LINK" "$MAC_CODESIGN_CERT_BASE64"
+          append_env "CSC_KEY_PASSWORD" "$MAC_CODESIGN_CERT_PASSWORD"
+          append_env "CSC_NAME" "$cert_name"
+
       - name: Build release artifacts
         run: pnpm ${{ matrix.script }}
 

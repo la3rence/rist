@@ -1,6 +1,6 @@
 {
   "name": "rist",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "private": true,
   "description": "A quiet cross-platform Redis desktop client.",
   "author": "la3rence",
@@ -12,6 +12,7 @@
     "postinstall": "npx install-electron",
     "typecheck": "tsc --noEmit",
     "build": "electron-vite build",
+    "mac:make-cert": "bash scripts/create-mac-codesign-cert.sh",
     "pack:mac": "uv run --managed-python --no-project electron-builder --mac --publish=never",
     "dist:mac": "pnpm build && pnpm pack:mac",
     "publish:mac": "pnpm build && uv run --managed-python --no-project electron-builder --mac --publish=always",
@@ -47,7 +48,8 @@
         "zip"
       ],
       "hardenedRuntime": true,
-      "gatekeeperAssess": false
+      "gatekeeperAssess": false,
+      "notarize": false
     },
     "dmg": {
       "artifactName": "${productName}-${version}-${arch}.${ext}"
