@@ -29,8 +29,9 @@ module.exports = async function afterPack(context) {
   }
 
   console.warn('[afterPack] No macOS signing identity found; applying stable ad-hoc signature for Squirrel.Mac update validation.');
-  await execFileAsync(codesignPath, ['--force', '--deep', '--sign', '-', '--options', 'runtime', appPath], { maxBuffer });
-  await execFileAsync(codesignPath, ['--force', '--sign', '-', '--options', 'runtime', '-r', `=designated => identifier "${bundleIdentifier}"`, appPath], { maxBuffer });
+  // Do not enable hardened runtime for the ad-hoc fallback; Electron framework loading can fail without Developer ID entitlements.
+  await execFileAsync(codesignPath, ['--force', '--deep', '--sign', '-', appPath], { maxBuffer });
+  await execFileAsync(codesignPath, ['--force', '--sign', '-', '-r', `=designated => identifier "${bundleIdentifier}"`, appPath], { maxBuffer });
   await execFileAsync(codesignPath, ['--verify', '--deep', '--strict', '--verbose=2', appPath], { maxBuffer });
   await execFileAsync(codesignPath, ['--verify', '--deep', '--strict', '--verbose=2', '-R', `=identifier "${bundleIdentifier}"`, appPath], { maxBuffer });
 };
