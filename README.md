@@ -30,3 +30,12 @@ pnpm build
 ## Notes
 
 Saved connection profiles are stored locally and encrypted with Electron `safeStorage` when available.
+
+For macOS user, please try to execute below command to skip GateKeeper.
+
+```sh
+xattr -dr com.apple.quarantine /path/to/Rist.app
+```
+
+Or open the app and go to System Settings - Privacy & Security - Open Anyway.
+This is an Open Souce app. Feel free to check the source code.
