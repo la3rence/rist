@@ -168,19 +168,44 @@ jobs:
           fi
 
           cert_name="${MAC_CODESIGN_CERT_NAME:-Rist Local Code Signing}"
+          cert_path="$RUNNER_TEMP/rist-local-codesign.p12"
+          cert_keychain="$RUNNER_TEMP/rist-codesign-check.keychain"
+          cert_keychain_password="$(uuidgen | tr -d '-')"
+
+          printf '%s' "$MAC_CODESIGN_CERT_BASE64" | tr -d '\r\n ' | base64 -D > "$cert_path"
+
+          openssl pkcs12 \
+            -in "$cert_path" \
+            -passin "pass:$MAC_CODESIGN_CERT_PASSWORD" \
+            -nokeys \
+            -clcerts \
+            -noout
+
+          security create-keychain -p "$cert_keychain_password" "$cert_keychain"
+          security unlock-keychain -p "$cert_keychain_password" "$cert_keychain"
+          security import "$cert_path" \
+            -k "$cert_keychain" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/productbuild \
+            -P "$MAC_CODESIGN_CERT_PASSWORD"
+          security find-identity -v -p codesigning "$cert_keychain"
+          security delete-keychain "$cert_keychain"
+
+          echo "Configured macOS code signing certificate: $cert_name"
+
           append_env() {
             local name="$1"
             local value="$2"
             local delimiter="EOF_${name}_$(uuidgen | tr -d '-')"
 
             {
-              echo "$name<<$delimiter"
-              echo "$value"
-              echo "$delimiter"
+              printf '%s\n' "$name<<$delimiter"
+              printf '%s\n' "$value"
+              printf '%s\n' "$delimiter"
             } >> "$GITHUB_ENV"
           }
 
-          append_env "CSC_LINK" "$MAC_CODESIGN_CERT_BASE64"
+          append_env "CSC_LINK" "file://$cert_path"
           append_env "CSC_KEY_PASSWORD" "$MAC_CODESIGN_CERT_PASSWORD"
           append_env "CSC_NAME" "$cert_name"
 
