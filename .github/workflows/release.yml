@@ -168,18 +168,30 @@ jobs:
           fi
 
           cert_name="${MAC_CODESIGN_CERT_NAME:-Rist Local Code Signing}"
+          raw_cert_path="$RUNNER_TEMP/rist-local-codesign.raw.p12"
           cert_path="$RUNNER_TEMP/rist-local-codesign.p12"
+          cert_pem_path="$RUNNER_TEMP/rist-local-codesign.pem"
           cert_keychain="$RUNNER_TEMP/rist-codesign-check.keychain"
           cert_keychain_password="$(uuidgen | tr -d '-')"
+          trap 'security delete-keychain "$cert_keychain" 2>/dev/null || true' EXIT
 
-          printf '%s' "$MAC_CODESIGN_CERT_BASE64" | tr -d '\r\n ' | base64 -D > "$cert_path"
+          printf '%s' "$MAC_CODESIGN_CERT_BASE64" | tr -d '\r\n ' | base64 -D > "$raw_cert_path"
 
           openssl pkcs12 \
-            -in "$cert_path" \
+            -in "$raw_cert_path" \
             -passin "pass:$MAC_CODESIGN_CERT_PASSWORD" \
-            -nokeys \
-            -clcerts \
-            -noout
+            -nodes \
+            -out "$cert_pem_path"
+
+          openssl pkcs12 \
+            -export \
+            -in "$cert_pem_path" \
+            -name "$cert_name" \
+            -out "$cert_path" \
+            -keypbe PBE-SHA1-3DES \
+            -certpbe PBE-SHA1-3DES \
+            -macalg sha1 \
+            -passout "pass:$MAC_CODESIGN_CERT_PASSWORD"
 
           security create-keychain -p "$cert_keychain_password" "$cert_keychain"
           security unlock-keychain -p "$cert_keychain_password" "$cert_keychain"
@@ -189,7 +201,6 @@ jobs:
             -T /usr/bin/productbuild \
             -P "$MAC_CODESIGN_CERT_PASSWORD"
           security find-identity -v -p codesigning "$cert_keychain"
-          security delete-keychain "$cert_keychain"
 
           echo "Configured macOS code signing certificate: $cert_name"
 

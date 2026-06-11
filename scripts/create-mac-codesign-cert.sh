@@ -62,6 +62,9 @@ openssl pkcs12 \
   -in "$tmp_dir/cert.pem" \
   -name "$cert_name" \
   -out "$p12_path" \
+  -keypbe PBE-SHA1-3DES \
+  -certpbe PBE-SHA1-3DES \
+  -macalg sha1 \
   -passout "pass:$p12_password" >/dev/null 2>&1
 
 base64 < "$p12_path" | tr -d '\n' > "$p12_path.base64.txt"
