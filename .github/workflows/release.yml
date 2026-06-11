@@ -1,6 +1,9 @@
 name: Release builds
 
 on:
+  push:
+    tags:
+      - '*'
   release:
     types:
       - published
@@ -15,8 +18,84 @@ permissions:
   contents: write
 
 jobs:
+  prepare-release:
+    name: Prepare release
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.resolve.outputs.tag }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Resolve release tag
+        id: resolve
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            tag="${{ github.event.release.tag_name }}"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="${GITHUB_REF_NAME}"
+          fi
+
+          if [ -z "$tag" ]; then
+            echo "Unable to resolve release tag" >&2
+            exit 1
+          fi
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout tag
+        if: github.event_name != 'release'
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.resolve.outputs.tag }}
+          fetch-depth: 0
+
+      - name: Create release notes
+        if: github.event_name != 'release'
+        shell: bash
+        run: |
+          tag="${{ steps.resolve.outputs.tag }}"
+          previous_tag="$(git describe --tags --abbrev=0 "${tag}^" 2>/dev/null || true)"
+
+          {
+            echo "## Changes"
+            echo
+            if [ -n "$previous_tag" ]; then
+              echo "Commits since \`$previous_tag\`:"
+              range="${previous_tag}..${tag}"
+            else
+              echo "Commits included in \`$tag\`:"
+              range="$tag"
+            fi
+            echo
+
+            commits="$(git log --pretty=format:'- %s (%h)' "$range")"
+            if [ -n "$commits" ]; then
+              echo "$commits"
+            else
+              echo "- No commits found."
+            fi
+            echo
+          } > release-notes.md
+
+      - name: Create or update GitHub release
+        if: github.event_name != 'release'
+        shell: bash
+        run: |
+          tag="${{ steps.resolve.outputs.tag }}"
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --title "$tag" --notes-file release-notes.md
+          else
+            gh release create "$tag" --title "$tag" --notes-file release-notes.md --verify-tag
+          fi
+
   build:
     name: Build ${{ matrix.platform }}
+    needs: prepare-release
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -24,20 +103,31 @@ jobs:
         include:
           - platform: macOS
             os: macos-latest
-            script: publish:mac
+            script: dist:mac
+            assets: |
+              release/*.dmg
+              release/*-mac.zip
+              release/*.blockmap
+              release/latest-mac.yml
           - platform: Windows
             os: windows-latest
-            script: publish:win
+            script: dist:win
+            assets: |
+              release/*.exe
+              release/*.zip
+              release/*.blockmap
+              release/latest.yml
 
     env:
       ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
       GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ needs.prepare-release.outputs.tag }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          ref: ${{ needs.prepare-release.outputs.tag }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
@@ -59,5 +149,27 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Build and publish release artifacts
+      - name: Build release artifacts
         run: pnpm ${{ matrix.script }}
+
+      - name: Upload release assets
+        shell: bash
+        env:
+          ASSET_PATTERNS: ${{ matrix.assets }}
+        run: |
+          shopt -s nullglob
+          files=()
+
+          while IFS= read -r pattern; do
+            [ -z "$pattern" ] && continue
+            for file in $pattern; do
+              [ -f "$file" ] && files+=("$file")
+            done
+          done <<< "$ASSET_PATTERNS"
+
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No release assets matched for ${{ matrix.platform }}" >&2
+            exit 1
+          fi
+
+          gh release upload "$RELEASE_TAG" "${files[@]}" --clobber

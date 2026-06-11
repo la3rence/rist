@@ -1,6 +1,6 @@
 {
   "name": "rist",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "private": true,
   "description": "A quiet cross-platform Redis desktop client.",
   "author": "la3rence",
@@ -26,6 +26,7 @@
     "directories": {
       "output": "release"
     },
+    "afterPack": "scripts/after-pack.cjs",
     "publish": [
       {
         "provider": "github",
