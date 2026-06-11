@@ -205,11 +205,13 @@ jobs:
             -r trustRoot \
             -p codeSign \
             -k /Library/Keychains/System.keychain \
-            "$cert_only_path"
+            "$cert_only_path" >/dev/null
 
           security create-keychain -p "$cert_keychain_password" "$cert_keychain"
           security set-keychain-settings -lut 21600 "$cert_keychain"
           security unlock-keychain -p "$cert_keychain_password" "$cert_keychain"
+          existing_keychains="$(security list-keychains -d user | sed 's/[ "]//g')"
+          security list-keychains -d user -s "$cert_keychain" $existing_keychains
           security import "$cert_path" \
             -k "$cert_keychain" \
             -T /usr/bin/codesign \
@@ -242,7 +244,8 @@ jobs:
             } >> "$GITHUB_ENV"
           }
 
-          append_env "CSC_KEYCHAIN" "$cert_keychain"
+          append_env "CSC_LINK" "file://$cert_path"
+          append_env "CSC_KEY_PASSWORD" "$MAC_CODESIGN_CERT_PASSWORD"
           append_env "CSC_NAME" "$cert_name"
 
       - name: Build release artifacts
