@@ -1,6 +1,6 @@
 {
   "name": "rist",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "private": true,
   "description": "A quiet cross-platform Redis desktop client.",
   "author": "la3rence",
@@ -50,7 +50,8 @@
       ],
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
-      "notarize": false
+      "notarize": false,
+      "timestamp": "none"
     },
     "dmg": {
       "artifactName": "${productName}-${version}-${arch}.${ext}"

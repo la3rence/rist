@@ -171,9 +171,9 @@ jobs:
           raw_cert_path="$RUNNER_TEMP/rist-local-codesign.raw.p12"
           cert_path="$RUNNER_TEMP/rist-local-codesign.p12"
           cert_pem_path="$RUNNER_TEMP/rist-local-codesign.pem"
+          cert_only_path="$RUNNER_TEMP/rist-local-codesign.crt"
           cert_keychain="$RUNNER_TEMP/rist-codesign-check.keychain"
           cert_keychain_password="$(uuidgen | tr -d '-')"
-          trap 'security delete-keychain "$cert_keychain" 2>/dev/null || true' EXIT
 
           printf '%s' "$MAC_CODESIGN_CERT_BASE64" | tr -d '\r\n ' | base64 -D > "$raw_cert_path"
 
@@ -193,14 +193,38 @@ jobs:
             -macalg sha1 \
             -passout "pass:$MAC_CODESIGN_CERT_PASSWORD"
 
+          openssl pkcs12 \
+            -in "$cert_path" \
+            -passin "pass:$MAC_CODESIGN_CERT_PASSWORD" \
+            -clcerts \
+            -nokeys \
+            -out "$cert_only_path"
+
           security create-keychain -p "$cert_keychain_password" "$cert_keychain"
+          security set-keychain-settings -lut 21600 "$cert_keychain"
           security unlock-keychain -p "$cert_keychain_password" "$cert_keychain"
           security import "$cert_path" \
             -k "$cert_keychain" \
             -T /usr/bin/codesign \
             -T /usr/bin/productbuild \
             -P "$MAC_CODESIGN_CERT_PASSWORD"
-          security find-identity -v -p codesigning "$cert_keychain"
+          security add-trusted-cert \
+            -r trustRoot \
+            -p codeSign \
+            -k "$cert_keychain" \
+            "$cert_only_path"
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -s \
+            -k "$cert_keychain_password" \
+            "$cert_keychain"
+
+          identities="$(security find-identity -v -p codesigning "$cert_keychain")"
+          echo "$identities"
+          if ! grep -q '1 valid identities found' <<< "$identities"; then
+            echo "The imported macOS signing certificate is not trusted for code signing." >&2
+            exit 1
+          fi
 
           echo "Configured macOS code signing certificate: $cert_name"
 
@@ -216,8 +240,7 @@ jobs:
             } >> "$GITHUB_ENV"
           }
 
-          append_env "CSC_LINK" "file://$cert_path"
-          append_env "CSC_KEY_PASSWORD" "$MAC_CODESIGN_CERT_PASSWORD"
+          append_env "CSC_KEYCHAIN" "$cert_keychain"
           append_env "CSC_NAME" "$cert_name"
 
       - name: Build release artifacts
