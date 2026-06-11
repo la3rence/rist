@@ -28,6 +28,7 @@
       "output": "release"
     },
     "afterPack": "scripts/after-pack.cjs",
+    "afterSign": "scripts/after-sign.cjs",
     "publish": [
       {
         "provider": "github",
